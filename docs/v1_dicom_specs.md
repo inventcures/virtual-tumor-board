@@ -37,40 +37,41 @@ Collaborative DICOM viewer for Virtual Tumor Board - allows MTB members to revie
 
 ## Implementation Phases
 
-### Phase 1: Core DICOM Viewer ✅ IN PROGRESS
+### Phase 1: Core DICOM Viewer ✅ COMPLETE
 - [x] Install dependencies (cornerstone, dicom-parser)
 - [x] Create synthetic volume generator
 - [x] Build ViewportPanel component
 - [x] Build WindowingControls
-- [ ] Build DicomViewer (multi-planar container)
-- [ ] Commit + Push
+- [x] Build DicomViewer (multi-planar container)
+- [x] Commit + Push
 
-### Phase 2: Radiologist Report Panel
-- [ ] Create report data structure
-- [ ] Build RadiologistReport component
-- [ ] Generate sample reports for 10 cases
-- [ ] Commit + Push
+### Phase 2: Radiologist Report Panel ✅ COMPLETE
+- [x] Create report data structure
+- [x] Build RadiologistReport component
+- [x] Generate sample reports for 10 cases
+- [x] Commit + Push
 
-### Phase 3: WebSocket Collaboration
+### Phase 3: WebSocket Collaboration (DEFERRED)
 - [ ] Create WebSocket API route
 - [ ] Build CollaborationOverlay component
 - [ ] Implement cursor sync
 - [ ] Implement annotation sharing
 - [ ] Commit + Push
 
-### Phase 4: Tab Integration
-- [ ] Create ImagingReviewTab component
-- [ ] Update page.tsx with tabs
-- [ ] Polish UI/UX
-- [ ] Commit + Push
+### Phase 4: Tab Integration ✅ COMPLETE
+- [x] Create ImagingReviewTab component
+- [x] Update page.tsx with tabs
+- [x] Polish UI/UX
+- [x] Commit + Push
 
-### Phase 5: Python Segmentation Service
+### Phase 5: Python Segmentation Service (DEFERRED)
 - [ ] Create Dockerfile for segmentation
 - [ ] Port MedSAM3 predictor
 - [ ] Add Railway service config
 - [ ] Commit + Push
 
-### Final: Deploy to Railway
+### Final: Deploy to Railway ✅ COMPLETE
+- Live at: https://virtual-tumor-board-production.up.railway.app
 
 ## File Structure
 
