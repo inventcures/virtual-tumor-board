@@ -1,0 +1,27 @@
+{
+  "name": "oss-virtual-tumor-board",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered Virtual Tumor Board with multi-agent deliberation",
+  "author": "Virtual Tumor Board Team",
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "deliberate": "pnpm --filter @vtb/agents deliberate",
+    "deliberate:demo": "pnpm --filter @vtb/agents deliberate:demo"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "vtb-video",
+  "version": "1.0.0",
+  "description": "Virtual Tumor Board promotional video",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts TumorBoardDemo out/vtb-demo.mp4",
+    "render:wide": "remotion render src/index.ts TumorBoardDemoWide out/vtb-demo-wide.mp4",
+    "render:gif": "remotion render src/index.ts TumorBoardDemo out/vtb-demo.gif --image-format=png",
+    "build": "remotion bundle src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@remotion/cli": "^4.0.409",
+    "@remotion/player": "^4.0.409",
+    "@types/react": "^19.2.9",
+    "puppeteer": "^24.36.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "remotion": "^4.0.409",
+    "typescript": "^5.9.3"
+  }
+}
