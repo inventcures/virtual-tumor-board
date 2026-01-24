@@ -10,7 +10,8 @@ interface DicomViewerProps {
   caseId?: string;
   tumorLocation?: { x: number; y: number; z: number; radius: number };
   onSliceChange?: (axis: ViewAxis, index: number) => void;
-  collaboratorCursors?: Array<{ userId: string; x: number; y: number; axis: ViewAxis; color: string }>;
+  collaboratorCursors?: Array<{ userId: string; x: number; y: number; color: string }>;
+  onCursorMove?: (x: number, y: number, axis: ViewAxis, slice: number) => void;
 }
 
 export function DicomViewer({
@@ -18,6 +19,7 @@ export function DicomViewer({
   tumorLocation,
   onSliceChange,
   collaboratorCursors = [],
+  onCursorMove,
 }: DicomViewerProps) {
   const [volume, setVolume] = useState<SyntheticVolume | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,18 +60,17 @@ export function DicomViewer({
 
   const handleCrosshairMove = useCallback(
     (axis: ViewAxis, position: { x: number; y: number; slice: number }) => {
-      // Could sync crosshairs across views or emit for collaboration
-      console.log(`Crosshair on ${axis}:`, position);
+      // Emit cursor position for collaboration
+      onCursorMove?.(position.x, position.y, axis, position.slice);
     },
-    []
+    [onCursorMove]
   );
 
-  // Filter collaborator cursors by axis
+  // Get cursors for display (already filtered or unfiltered)
   const getCursorsForAxis = useCallback(
-    (axis: ViewAxis) => {
-      return collaboratorCursors
-        .filter((c) => c.axis === axis)
-        .map((c) => ({ userId: c.userId, x: c.x, y: c.y, color: c.color }));
+    (_axis: ViewAxis) => {
+      // Cursors are now passed pre-filtered or we show all
+      return collaboratorCursors;
     },
     [collaboratorCursors]
   );
