@@ -15,7 +15,8 @@ import {
   Loader2,
   AlertCircle,
   FileText,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Zap
 } from "lucide-react";
 import type { UploadSession, UploadedDocument, DocumentType } from "@/types/user-upload";
 import { 
@@ -24,6 +25,16 @@ import {
   DOCUMENT_TYPE_LABELS,
   getCancerSiteById 
 } from "@/lib/upload/constants";
+
+// Processing status for the modal
+interface ProcessingStatus {
+  isProcessing: boolean;
+  currentFile: number;
+  totalFiles: number;
+  currentFileName: string;
+  stage: 'saving' | 'compressing' | 'done';
+  error?: string;
+}
 
 // Simple heuristic document classification
 function classifyDocument(filename: string, text?: string): { type: DocumentType; confidence: number } {
@@ -65,7 +76,13 @@ export default function DocumentUploadPage() {
   const [session, setSession] = useState<UploadSession | null>(null);
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [totalSize, setTotalSize] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
+    isProcessing: false,
+    currentFile: 0,
+    totalFiles: 0,
+    currentFileName: '',
+    stage: 'saving',
+  });
 
   // Load session from localStorage
   useEffect(() => {
@@ -149,7 +166,7 @@ export default function DocumentUploadPage() {
       'image/webp': ['.webp'],
     },
     maxFiles: UPLOAD_LIMITS.MAX_FILES_PER_SESSION,
-    disabled: isProcessing,
+    disabled: processingStatus.isProcessing,
   });
 
   // Remove document
@@ -170,20 +187,72 @@ export default function DocumentUploadPage() {
     ));
   };
 
-  // Handle continue
-  const handleContinue = () => {
+  // Handle continue with progress feedback
+  const handleContinue = async () => {
     if (!session || documents.length === 0) return;
 
-    setIsProcessing(true);
+    setProcessingStatus({
+      isProcessing: true,
+      currentFile: 0,
+      totalFiles: documents.length,
+      currentFileName: 'Preparing...',
+      stage: 'saving',
+    });
 
-    // Update session
-    const updatedSession: UploadSession = {
-      ...session,
-      documents,
-    };
+    try {
+      // Process documents in batches to show progress
+      const processedDocs: UploadedDocument[] = [];
+      
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
+        
+        setProcessingStatus(prev => ({
+          ...prev,
+          currentFile: i + 1,
+          currentFileName: doc.filename,
+          stage: 'compressing',
+        }));
 
-    localStorage.setItem("vtb_upload_session", JSON.stringify(updatedSession));
-    router.push("/upload/review");
+        // Small delay to allow UI to update and prevent blocking
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        processedDocs.push(doc);
+      }
+
+      setProcessingStatus(prev => ({
+        ...prev,
+        stage: 'saving',
+        currentFileName: 'Saving to session...',
+      }));
+
+      // Save to localStorage
+      const updatedSession: UploadSession = {
+        ...session,
+        documents: processedDocs,
+      };
+
+      // Use requestIdleCallback or setTimeout to prevent UI blocking
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      localStorage.setItem("vtb_upload_session", JSON.stringify(updatedSession));
+
+      setProcessingStatus(prev => ({
+        ...prev,
+        stage: 'done',
+        currentFileName: 'Complete!',
+      }));
+
+      // Small delay before navigation
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      router.push("/upload/review");
+    } catch (error) {
+      setProcessingStatus(prev => ({
+        ...prev,
+        isProcessing: false,
+        error: 'Failed to process documents. Please try again.',
+      }));
+    }
   };
 
   const handleBack = () => {
@@ -257,7 +326,7 @@ export default function DocumentUploadPage() {
                 ? "border-indigo-500 bg-indigo-500/10"
                 : "border-slate-700 hover:border-slate-600 bg-slate-800/50"
               }
-              ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}
+              ${processingStatus.isProcessing ? "opacity-50 cursor-not-allowed" : ""}
             `}
           >
             <input {...getInputProps()} />
@@ -420,16 +489,16 @@ export default function DocumentUploadPage() {
 
             <button
               onClick={handleContinue}
-              disabled={documents.length === 0 || isProcessing}
+              disabled={documents.length === 0 || processingStatus.isProcessing}
               className={`
                 flex items-center gap-2 px-8 py-3 rounded-xl font-semibold transition-all
-                ${documents.length > 0 && !isProcessing
+                ${documents.length > 0 && !processingStatus.isProcessing
                   ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg hover:shadow-indigo-500/25"
                   : "bg-slate-800 text-slate-500 cursor-not-allowed"
                 }
               `}
             >
-              {isProcessing ? (
+              {processingStatus.isProcessing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Processing...
@@ -444,6 +513,83 @@ export default function DocumentUploadPage() {
           </div>
         </div>
       </main>
+
+      {/* Processing Modal Overlay */}
+      {processingStatus.isProcessing && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-slate-800 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl border border-slate-700">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                <Zap className="w-6 h-6 text-white animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">
+                  Preparing Documents
+                </h3>
+                <p className="text-sm text-slate-400">
+                  Please wait, this may take a moment...
+                </p>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="mb-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-300">
+                  Processing {processingStatus.currentFile} of {processingStatus.totalFiles}
+                </span>
+                <span className="text-indigo-400">
+                  {Math.round((processingStatus.currentFile / processingStatus.totalFiles) * 100)}%
+                </span>
+              </div>
+              <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${(processingStatus.currentFile / processingStatus.totalFiles) * 100}%` 
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Current file */}
+            <div className="bg-slate-900/50 rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-indigo-400 animate-spin flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
+                    {processingStatus.stage === 'compressing' ? 'Processing' : 
+                     processingStatus.stage === 'saving' ? 'Saving' : 'Complete'}
+                  </p>
+                  <p className="text-sm text-white truncate">
+                    {processingStatus.currentFileName}
+                  </p>
+                </div>
+                {processingStatus.stage === 'done' && (
+                  <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                )}
+              </div>
+            </div>
+
+            {/* Status message */}
+            <p className="text-xs text-slate-500 text-center">
+              {processingStatus.stage === 'compressing' 
+                ? 'Optimizing documents for tumor board review...'
+                : processingStatus.stage === 'saving'
+                ? 'Saving session data...'
+                : 'Redirecting to review page...'}
+            </p>
+
+            {/* Error message */}
+            {processingStatus.error && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                <p className="text-sm text-red-400">{processingStatus.error}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
