@@ -609,7 +609,13 @@ export default function DocumentUploadPage() {
 
       // Quick transition
       await new Promise(r => setTimeout(r, 300));
-      router.push("/upload/review");
+      
+      // If auto-staging mode, go to auto-stage page first
+      if (session.cancerSite === "auto-detect") {
+        router.push("/upload/auto-stage");
+      } else {
+        router.push("/upload/review");
+      }
 
     } catch (error: any) {
       if (error.message !== 'Cancelled') {

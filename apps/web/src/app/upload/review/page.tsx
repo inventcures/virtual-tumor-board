@@ -15,8 +15,13 @@ import {
   FlaskConical,
   Pill,
   TestTube,
-  ClipboardList
+  ClipboardList,
+  Calendar,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
+import { TreatmentTimeline } from "@/components/TreatmentTimeline";
+import type { AutoStageResult } from "@/types/user-upload";
 import type { 
   UploadSession, 
   DocumentType, 
@@ -187,6 +192,10 @@ export default function ReviewPage() {
   const router = useRouter();
   const [session, setSession] = useState<UploadSession | null>(null);
   const [isStartingDeliberation, setIsStartingDeliberation] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(true);
+  
+  // Auto-stage result (if available)
+  const autoStageResult: AutoStageResult | undefined = (session as any)?.autoStageResult;
 
   // Load session from localStorage
   useEffect(() => {
@@ -459,6 +468,41 @@ export default function ReviewPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Treatment Timeline (if auto-staged) */}
+          {autoStageResult?.extractedDates && autoStageResult.extractedDates.length > 0 && (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
+              <button
+                onClick={() => setShowTimeline(!showTimeline)}
+                className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-white">Treatment Journey Timeline</p>
+                    <p className="text-sm text-slate-400">
+                      {autoStageResult.extractedDates.length} events detected from documents
+                    </p>
+                  </div>
+                </div>
+                {showTimeline ? (
+                  <ChevronUp className="w-5 h-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-slate-400" />
+                )}
+              </button>
+              
+              {showTimeline && (
+                <div className="p-4 border-t border-slate-700/50">
+                  <TreatmentTimeline 
+                    extractedDates={autoStageResult.extractedDates}
+                  />
+                </div>
+              )}
             </div>
           )}
 

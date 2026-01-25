@@ -9,7 +9,11 @@ import {
   Search,
   HelpCircle,
   Flame,
-  Globe
+  Globe,
+  Sparkles,
+  Upload,
+  FileSearch,
+  Zap
 } from "lucide-react";
 import type { UploadSession, StagingInfo } from "@/types/user-upload";
 import { CANCER_SITES, getCancerSiteById } from "@/lib/upload/constants";
@@ -76,6 +80,22 @@ export default function CancerInfoPage() {
       ...session,
       cancerSite: selectedCancerSite === "other" ? otherCancerSite : selectedCancerSite,
       staging,
+    };
+
+    localStorage.setItem("vtb_upload_session", JSON.stringify(updatedSession));
+    router.push("/upload/documents");
+  };
+
+  // Handle "Figure It Out" - skip to documents with auto-detect flag
+  const handleFigureItOut = () => {
+    if (!session) return;
+
+    // Update session with auto-detect flag
+    const updatedSession = {
+      ...session,
+      cancerSite: "auto-detect",  // Special value indicating auto-detection needed
+      isAutoStaged: true,
+      staging: {},
     };
 
     localStorage.setItem("vtb_upload_session", JSON.stringify(updatedSession));
@@ -214,6 +234,82 @@ export default function CancerInfoPage() {
                 />
               </div>
             )}
+
+            {/* Divider */}
+            <div className="relative my-8">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-slate-900 text-slate-500">OR</span>
+              </div>
+            </div>
+
+            {/* Figure It Out Section */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-500/10 via-indigo-500/10 to-cyan-500/10 border-2 border-purple-500/30 p-6">
+              {/* Animated background */}
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-cyan-500/5 animate-pulse" />
+              
+              <div className="relative">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/25">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">
+                      Not sure? Let AI figure it out
+                    </h3>
+                    <p className="text-sm text-purple-300">
+                      Skip this step entirely
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-slate-300 text-sm mb-4">
+                  Upload your medical documents and our AI will automatically detect:
+                </p>
+
+                <div className="grid sm:grid-cols-2 gap-3 mb-6">
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
+                      <FileSearch className="w-3.5 h-3.5 text-purple-400" />
+                    </div>
+                    <span className="text-slate-300">Cancer type & site</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                      <Zap className="w-3.5 h-3.5 text-indigo-400" />
+                    </div>
+                    <span className="text-slate-300">Stage (TNM & overall)</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                      <Brain className="w-3.5 h-3.5 text-cyan-400" />
+                    </div>
+                    <span className="text-slate-300">Key biomarkers & mutations</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                      <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
+                    <span className="text-slate-300">Treatment timeline</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleFigureItOut}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-semibold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white shadow-lg hover:shadow-purple-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Upload className="w-5 h-5" />
+                  Upload Documents & Auto-Detect
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+
+                <p className="text-center text-xs text-slate-500 mt-3">
+                  You can review and edit the AI's findings before proceeding
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Staging Information */}

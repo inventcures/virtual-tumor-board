@@ -1,11 +1,19 @@
 /**
  * Document Processing API with Gemini Flash
  * Handles OCR, classification, and data extraction from medical documents
+ * 
+ * V5: Now with intelligent caching for repeated documents
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { DocumentType, ExtractedClinicalData } from "@/types/user-upload";
+import { 
+  generateCacheKey, 
+  getCachedResult, 
+  cacheResult,
+  getCacheStats 
+} from "@/lib/cache/document-cache";
 
 export const runtime = "edge";
 export const maxDuration = 60; // 60 seconds for processing
@@ -286,6 +294,8 @@ function redactPII(text: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
     const body = await request.json();
     const { 
@@ -309,6 +319,36 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // ============================================================
+    // V5: CHECK CACHE FIRST
+    // ============================================================
+    const cacheKey = await generateCacheKey(fileBase64, mimeType);
+    const cachedResult = getCachedResult(cacheKey);
+    
+    if (cachedResult && !documentTypeOverride) {
+      // Cache hit! Return cached result
+      console.log(`[Cache HIT] ${filename} - saved ${cachedResult.processingTimeMs}ms`);
+      
+      const documentId = `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      return NextResponse.json({
+        documentId,
+        classifiedType: cachedResult.classifiedType,
+        confidence: cachedResult.confidence,
+        extractedData: cachedResult.extractedData,
+        warnings: cachedResult.warnings,
+        textLength: cachedResult.textLength,
+        // Cache metadata
+        cached: true,
+        cacheHit: 'memory',
+        processingTimeMs: Date.now() - startTime,
+        savedTimeMs: cachedResult.processingTimeMs,
+      });
+    }
+    
+    console.log(`[Cache MISS] ${filename} - processing with Gemini`);
+    // ============================================================
 
     let extractedText = "";
     const warnings: string[] = [];
@@ -363,6 +403,23 @@ export async function POST(request: NextRequest) {
 
     // Generate document ID
     const documentId = `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const processingTimeMs = Date.now() - startTime;
+
+    // ============================================================
+    // V5: CACHE THE RESULT
+    // ============================================================
+    if (!documentTypeOverride) {
+      cacheResult(cacheKey, {
+        classifiedType,
+        confidence,
+        extractedData,
+        textLength: extractedText.length,
+        warnings,
+      }, processingTimeMs);
+      console.log(`[Cache STORE] ${filename} - ${processingTimeMs}ms`);
+    }
+    // ============================================================
 
     return NextResponse.json({
       documentId,
@@ -371,6 +428,10 @@ export async function POST(request: NextRequest) {
       extractedData,
       warnings,
       textLength: extractedText.length,
+      // Cache metadata
+      cached: false,
+      cacheHit: 'miss',
+      processingTimeMs,
     });
 
   } catch (error) {
