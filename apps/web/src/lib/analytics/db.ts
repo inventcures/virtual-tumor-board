@@ -7,7 +7,11 @@
  * Railway provides DATABASE_URL automatically when you add Postgres.
  * 
  * Schema is auto-created on first connection.
+ * 
+ * NOTE: This module is SERVER-ONLY. Do not import from client components.
  */
+
+import 'server-only';
 
 import { 
   VisitorInfo, 

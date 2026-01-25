@@ -4,6 +4,8 @@
  * Comprehensive analytics for Virtual Tumor Board.
  * Includes visitor tracking, page views, feature usage, and imaging analytics.
  * Follows Saloni Dattani's data visualization principles.
+ * 
+ * NOTE: For PostgreSQL persistent store, import directly from './db' in server components only.
  */
 
 // Imaging-specific analytics
@@ -30,7 +32,7 @@ export type {
   AnalyticsStore,
 } from './types';
 
-// In-memory store (for real-time queries)
+// In-memory store (for real-time queries) - works on both server and client
 export {
   analyticsStore,
   generateId,
@@ -38,14 +40,11 @@ export {
   getStoreStats,
 } from './store';
 
-// Persistent store (PostgreSQL for Railway)
-export {
-  persistentStore,
-  getTodayDate,
-} from './db';
-
 // Geolocation utilities
 export {
   getGeoLocation,
   getCountryFlag,
 } from './geolocation';
+
+// NOTE: persistentStore and getTodayDate are SERVER-ONLY
+// Import directly: import { persistentStore, getTodayDate } from '@/lib/analytics/db';
