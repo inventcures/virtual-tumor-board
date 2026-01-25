@@ -1,0 +1,11 @@
+{
+  "name": "vtb-demo-capture",
+  "version": "1.0.0",
+  "description": "Demo video capture for Virtual Tumor Board",
+  "scripts": {
+    "capture": "node capture-playwright.js"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}
