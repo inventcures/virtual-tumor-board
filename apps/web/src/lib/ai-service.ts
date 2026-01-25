@@ -222,7 +222,7 @@ export async function callAI(
 export function getAvailableProviders(): { claude: boolean; gemini: boolean } {
   return {
     claude: !!process.env.ANTHROPIC_API_KEY,
-    gemini: !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
+    gemini: !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY),
   };
 }
 
