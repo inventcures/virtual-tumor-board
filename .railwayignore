@@ -1,0 +1,8 @@
+# Ignore large image files for Railway deployment
+apps/web/public/dicom/
+apps/web/public/imaging/
+scripts/real_data/
+*.zip
+*.dcm
+*.nii
+*.nii.gz

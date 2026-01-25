@@ -1,0 +1,8 @@
+# Ignore large image files for Railway deployment
+# These will use procedural generation as fallback
+public/dicom/
+public/imaging/
+
+# Ignore local data folders
+scripts/real_data/
+*.zip

@@ -3,9 +3,27 @@
  * 
  * Loads and parses real DICOM files using dicom-parser.
  * Renders DICOM pixel data with proper windowing.
+ * 
+ * CDN Priority:
+ * 1. Cloudflare R2 (primary - fastest)
+ * 2. GitHub Pages (fallback)
+ * 3. Local /dicom/ (development only)
  */
 
 import dicomParser from 'dicom-parser';
+
+// CDN Configuration
+// TODO: Replace R2_CDN_URL with your Cloudflare R2 public bucket URL
+const R2_CDN_URL = process.env.NEXT_PUBLIC_R2_CDN_URL || null; // e.g., 'https://pub-xxxxx.r2.dev'
+const GITHUB_CDN_URL = 'https://inventcures.github.io/vtb-dicom';
+const LOCAL_URL = '/dicom'; // Fallback for local development
+
+// CDN sources in priority order
+const CDN_SOURCES = [
+  R2_CDN_URL,
+  GITHUB_CDN_URL,
+  LOCAL_URL,
+].filter(Boolean) as string[];
 
 export interface DicomMetadata {
   patientName?: string;
@@ -60,34 +78,90 @@ export const CASE_DICOM_MAPPING: Record<string, { folder: string; description: s
   'pediatric-gbm-brain': { folder: 'brain', description: 'Brain MRI/NIfTI' },
 };
 
+// Known file counts per folder (to avoid needing a file list API for CDN)
+const FOLDER_FILE_COUNTS: Record<string, number> = {
+  'lung': 135,
+  'breast': 45,
+  'colorectal': 104,
+  'headneck': 49,
+  'cervix': 153,
+  'prostate': 21,
+  'gastric': 50,
+  'ovarian': 70,
+  'esophageal': 145,
+  'brain': 1, // NIfTI, handled separately
+};
+
 /**
- * Fetch DICOM file list from API
+ * Generate DICOM file list for a folder
+ * Files are named 00000001.dcm, 00000002.dcm, etc.
  */
-export async function fetchDicomFileList(folder: string): Promise<string[]> {
-  try {
-    const response = await fetch(`/api/dicom/${folder}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch file list: ${response.statusText}`);
-    }
-    const data = await response.json();
-    return data.files || [];
-  } catch (error) {
-    console.error(`[DicomLoader] Error fetching file list for ${folder}:`, error);
-    return [];
+export function generateDicomFileList(folder: string): string[] {
+  const count = FOLDER_FILE_COUNTS[folder];
+  if (!count) return [];
+  
+  const files: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    files.push(`${String(i).padStart(8, '0')}.dcm`);
   }
+  return files;
 }
 
 /**
- * Parse a single DICOM file
+ * Fetch DICOM file list - tries local API first, falls back to generated list
  */
-export async function parseDicomFile(url: string): Promise<DicomSlice | null> {
+export async function fetchDicomFileList(folder: string): Promise<string[]> {
+  // First try local API (for development)
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch DICOM: ${response.statusText}`);
+    const response = await fetch(`/api/dicom/${folder}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.files?.length > 0) {
+        return data.files;
+      }
+    }
+  } catch {
+    // API not available, use generated list
+  }
+  
+  // Fall back to generated list
+  return generateDicomFileList(folder);
+}
+
+/**
+ * Fetch a DICOM file with CDN fallback
+ * Tries R2 -> GitHub Pages -> Local in order
+ */
+async function fetchWithFallback(folder: string, filename: string): Promise<ArrayBuffer | null> {
+  for (const baseUrl of CDN_SOURCES) {
+    const url = `${baseUrl}/${folder}/${filename}`;
+    try {
+      const response = await fetch(url, { 
+        mode: 'cors',
+        cache: 'force-cache' // Cache aggressively for DICOM files
+      });
+      if (response.ok) {
+        console.log(`[DicomLoader] Loaded from ${baseUrl}`);
+        return await response.arrayBuffer();
+      }
+    } catch (err) {
+      console.log(`[DicomLoader] Failed to fetch from ${baseUrl}, trying next...`);
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse a single DICOM file from folder/filename
+ */
+export async function parseDicomFile(folder: string, filename: string): Promise<DicomSlice | null> {
+  try {
+    const arrayBuffer = await fetchWithFallback(folder, filename);
+    if (!arrayBuffer) {
+      console.error(`[DicomLoader] All CDN sources failed for ${folder}/${filename}`);
+      return null;
     }
     
-    const arrayBuffer = await response.arrayBuffer();
     const byteArray = new Uint8Array(arrayBuffer);
     const dataSet = dicomParser.parseDicom(byteArray);
     
@@ -116,7 +190,7 @@ export async function parseDicomFile(url: string): Promise<DicomSlice | null> {
     // Extract pixel data
     const pixelDataElement = dataSet.elements.x7fe00010;
     if (!pixelDataElement) {
-      console.warn(`[DicomLoader] No pixel data in ${url}`);
+      console.warn(`[DicomLoader] No pixel data in ${folder}/${filename}`);
       return null;
     }
     
@@ -130,6 +204,54 @@ export async function parseDicomFile(url: string): Promise<DicomSlice | null> {
       pixelData,
       instanceNumber: metadata.instanceNumber || 0,
     };
+  } catch (error) {
+    console.error(`[DicomLoader] Error parsing ${folder}/${filename}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Legacy: Parse DICOM from full URL (for backwards compatibility)
+ */
+export async function parseDicomFileFromUrl(url: string): Promise<DicomSlice | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch DICOM: ${response.statusText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const byteArray = new Uint8Array(arrayBuffer);
+    const dataSet = dicomParser.parseDicom(byteArray);
+    
+    const metadata: DicomMetadata = {
+      patientName: dataSet.string('x00100010'),
+      patientId: dataSet.string('x00100020'),
+      studyDate: dataSet.string('x00080020'),
+      modality: dataSet.string('x00080060'),
+      seriesDescription: dataSet.string('x0008103e'),
+      instanceNumber: dataSet.intString('x00200013'),
+      sliceLocation: dataSet.floatString('x00201041'),
+      rows: dataSet.uint16('x00280010') || 512,
+      columns: dataSet.uint16('x00280011') || 512,
+      bitsAllocated: dataSet.uint16('x00280100') || 16,
+      bitsStored: dataSet.uint16('x00280101') || 12,
+      highBit: dataSet.uint16('x00280102') || 11,
+      pixelRepresentation: dataSet.uint16('x00280103') || 0,
+      windowCenter: parseWindowValue(dataSet.string('x00281050')),
+      windowWidth: parseWindowValue(dataSet.string('x00281051')),
+      rescaleIntercept: dataSet.floatString('x00281052') || 0,
+      rescaleSlope: dataSet.floatString('x00281053') || 1,
+      photometricInterpretation: dataSet.string('x00280004'),
+    };
+    
+    const pixelDataElement = dataSet.elements.x7fe00010;
+    if (!pixelDataElement) return null;
+    
+    const pixelData = extractPixelData(dataSet, metadata);
+    if (!pixelData) return null;
+    
+    return { metadata, pixelData, instanceNumber: metadata.instanceNumber || 0 };
   } catch (error) {
     console.error(`[DicomLoader] Error parsing ${url}:`, error);
     return null;
@@ -195,6 +317,7 @@ function extractPixelData(
 
 /**
  * Load a complete DICOM series for a case
+ * Uses CDN with fallback: R2 -> GitHub Pages -> Local
  */
 export async function loadDicomSeries(
   caseId: string,
@@ -208,6 +331,7 @@ export async function loadDicomSeries(
   
   const { folder } = mapping;
   console.log(`[DicomLoader] Loading DICOM series from ${folder}...`);
+  console.log(`[DicomLoader] CDN sources: ${CDN_SOURCES.join(' -> ')}`);
   
   // Get file list
   const files = await fetchDicomFileList(folder);
@@ -216,18 +340,18 @@ export async function loadDicomSeries(
     return { folder, slices: [], loaded: false, error: 'No files found', minValue: 0, maxValue: 0, defaultWindowCenter: 40, defaultWindowWidth: 400 };
   }
   
-  console.log(`[DicomLoader] Found ${files.length} DICOM files`);
+  console.log(`[DicomLoader] Loading ${files.length} DICOM files...`);
   
   // Load slices in batches
   const slices: DicomSlice[] = [];
-  const batchSize = 5;
+  const batchSize = 10; // Increased for CDN (lower latency per request)
   let minValue = Infinity;
   let maxValue = -Infinity;
   
   for (let i = 0; i < files.length; i += batchSize) {
     const batch = files.slice(i, i + batchSize);
     const batchPromises = batch.map(file => 
-      parseDicomFile(`/dicom/${folder}/${file}`)
+      parseDicomFile(folder, file)
     );
     
     const batchResults = await Promise.all(batchPromises);
@@ -235,8 +359,10 @@ export async function loadDicomSeries(
     for (const slice of batchResults) {
       if (slice) {
         slices.push(slice);
-        // Track min/max for windowing
-        for (let j = 0; j < slice.pixelData.length; j++) {
+        // Sample min/max from center pixels only (faster)
+        const sampleSize = Math.min(1000, slice.pixelData.length);
+        const step = Math.floor(slice.pixelData.length / sampleSize);
+        for (let j = 0; j < slice.pixelData.length; j += step) {
           const val = slice.pixelData[j] * slice.metadata.rescaleSlope + slice.metadata.rescaleIntercept;
           if (val < minValue) minValue = val;
           if (val > maxValue) maxValue = val;
@@ -286,6 +412,13 @@ export async function loadDicomSeries(
     defaultWindowCenter,
     defaultWindowWidth,
   };
+}
+
+/**
+ * Get the active CDN URL for display
+ */
+export function getActiveCDN(): string {
+  return CDN_SOURCES[0] || 'local';
 }
 
 /**
