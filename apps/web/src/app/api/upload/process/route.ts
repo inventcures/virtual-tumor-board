@@ -7,13 +7,17 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { DocumentType, ExtractedClinicalData } from "@/types/user-upload";
+import type { DocumentType, ExtractedClinicalData, DocumentClassification } from "@/types/user-upload";
 import { 
   generateCacheKey, 
   getCachedResult, 
   cacheResult,
   getCacheStats 
 } from "@/lib/cache/document-cache";
+import {
+  buildDocumentClassification,
+  mergeExtractedData,
+} from "@/lib/classification/composite-document-handler";
 
 export const runtime = "edge";
 export const maxDuration = 60; // 60 seconds for processing
@@ -23,6 +27,7 @@ const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY |
 const genAI = new GoogleGenerativeAI(GEMINI_KEY);
 
 // Document classification patterns (fast heuristic check first)
+// V5.2: Enhanced with Indian medical terminology
 const DOCUMENT_PATTERNS: Record<DocumentType, RegExp[]> = {
   pathology: [
     /histopath/i, /biopsy/i, /specimen/i, /microscop/i,
@@ -30,6 +35,9 @@ const DOCUMENT_PATTERNS: Record<DocumentType, RegExp[]> = {
     /immunohistochem/i, /ihc/i, /er\s*positive/i,
     /her2/i, /ki-?67/i, /tumor\s*cells/i, /malignant/i,
     /pathology\s*report/i, /gross\s*description/i,
+    // Indian terms
+    /hpe\s*report/i, /fnac/i, /trucut/i, /core\s*biopsy/i,
+    /histological\s*examination/i,
   ],
   radiology: [
     /ct\s*scan/i, /mri/i, /pet\s*scan/i, /x-?ray/i,
@@ -37,17 +45,25 @@ const DOCUMENT_PATTERNS: Record<DocumentType, RegExp[]> = {
     /hounsfield/i, /suv/i, /contrast/i, /radiology/i,
     /axial/i, /coronal/i, /sagittal/i, /mass\s*measuring/i,
     /lymph\s*node/i, /metast/i,
+    // Indian terms
+    /usg/i, /cect/i, /hrct/i, /mrcp/i, /pet-?ct/i,
+    /mammogra/i, /sono-?mammo/i,
   ],
   genomics: [
     /ngs/i, /next\s*gen/i, /sequencing/i, /mutation/i,
     /variant/i, /egfr/i, /kras/i, /braf/i, /foundation/i,
     /guardant/i, /msi-?h/i, /tmb/i, /molecular/i,
     /exon/i, /deletion/i, /amplification/i,
+    /brca/i, /genetic\s*testing/i, /oncomine/i,
   ],
   prescription: [
     /rx/i, /prescription/i, /dosage/i, /mg\/m2/i,
     /cycles/i, /chemotherapy/i, /regimen/i,
     /tablet/i, /injection/i, /infusion/i,
+    // Indian terms - OPD slips
+    /opd\s*slip/i, /opd\s*prescription/i, /treatment\s*advice/i,
+    /follow\s*up\s*advice/i, /medicines?\s*advised/i,
+    /tab\s*\w+\s*\d+\s*mg/i, /cap\s*\w+/i, /inj\s*\w+/i,
   ],
   "lab-report": [
     /cbc/i, /complete\s*blood/i, /hemoglobin/i,
@@ -55,20 +71,33 @@ const DOCUMENT_PATTERNS: Record<DocumentType, RegExp[]> = {
     /reference\s*range/i, /wbc/i, /platelet/i,
     /lft/i, /kft/i, /rft/i, /liver\s*function/i,
     /tumor\s*marker/i, /cea/i, /ca\s*19/i, /ca\s*125/i, /afp/i,
+    // Indian terms
+    /tlc/i, /dlc/i, /esr/i, /hba1c/i, /tsh/i,
+    /lipid\s*profile/i, /blood\s*sugar/i,
   ],
   "clinical-notes": [
     /consultation/i, /chief\s*complaint/i, /history/i,
     /physical\s*exam/i, /assessment/i, /plan/i,
     /opd/i, /follow\s*up/i,
+    // Indian terms
+    /k\/c\/o/i, /c\/o/i, /h\/o/i, /o\/e/i,
+    /clinical\s*notes/i, /case\s*summary/i,
   ],
   "discharge-summary": [
     /discharge/i, /admission/i, /hospital\s*stay/i,
     /diagnosis\s*at\s*discharge/i, /condition\s*at\s*discharge/i,
+    // Indian terms
+    /ipd\s*discharge/i, /indoor\s*summary/i, /case\s*sheet/i,
+    /final\s*diagnosis/i, /treatment\s*given/i,
   ],
   "surgical-notes": [
     /operative/i, /surgery/i, /procedure/i,
     /incision/i, /resection/i, /anastomosis/i,
     /intraoperative/i, /surgeon/i,
+    // Indian terms
+    /mrm/i, /bcs/i, /wle/i, /slnb/i, /alnd/i,
+    /tah-?bso/i, /lar/i, /apr/i, /whipple/i,
+    /operative\s*notes/i, /ot\s*notes/i,
   ],
   unknown: [],
 };
@@ -399,7 +428,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 4: Extract clinical data
-    const extractedData = await extractClinicalData(redactedText, classifiedType);
+    let extractedData = await extractClinicalData(redactedText, classifiedType);
+
+    // ============================================================
+    // V5.2: BUILD ENHANCED CLASSIFICATION WITH COMPOSITE HANDLING
+    // ============================================================
+    const classification = buildDocumentClassification(
+      classifiedType,
+      confidence,
+      redactedText
+    );
+    
+    // If composite document, merge extracted data from sections
+    if (classification.isComposite && classification.extractedSections) {
+      extractedData = mergeExtractedData(extractedData, classification.extractedSections);
+      
+      // Add note about composite nature
+      warnings.push(
+        `Composite document detected: Contains ${classification.containsContent.length} types of clinical information`
+      );
+      
+      console.log(`[Composite] ${filename} contains: ${classification.containsContent.join(', ')}`);
+    }
+    // ============================================================
 
     // Generate document ID
     const documentId = `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -428,6 +479,10 @@ export async function POST(request: NextRequest) {
       extractedData,
       warnings,
       textLength: extractedText.length,
+      // V5.2: Enhanced classification
+      classification,
+      isComposite: classification.isComposite,
+      containsContent: classification.containsContent,
       // Cache metadata
       cached: false,
       cacheHit: 'miss',
