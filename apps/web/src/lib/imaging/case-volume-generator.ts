@@ -40,11 +40,23 @@ const HU = {
   TUMOR_SOFT: 55, TUMOR_NECROSIS: 20, TUMOR_ENHANCED: 80,
 };
 
-// MRI intensities (T1 post-contrast approximate)
+// MRI intensities (T1 post-contrast, 0-1000 scale)
 const MRI = {
-  CSF: 100, BRAIN_WM: 600, BRAIN_GM: 500,
-  TUMOR_SOLID: 750, TUMOR_NECROSIS: 200, TUMOR_ENHANCED: 900,
-  EDEMA: 350, FAT: 800, BONE: 50,
+  CSF: 80, 
+  BRAIN_WM: 620, 
+  BRAIN_GM: 480,
+  DEEP_GRAY: 450,
+  TUMOR_SOLID: 520, 
+  TUMOR_NECROSIS: 120, 
+  TUMOR_ENHANCED: 900,
+  EDEMA: 350, 
+  FAT: 850, 
+  BONE: 80,
+  DURA: 650,
+  SCALP_FAT: 850,
+  SCALP_MUSCLE: 400,
+  SKULL_CORTEX: 80,
+  SKULL_DIPLOE: 700,
 };
 
 // Seeded random for reproducibility
@@ -355,55 +367,159 @@ function generateThoraxCT(width: number, height: number, depth: number, config: 
 }
 
 /**
- * Generate Brain MRI volume
+ * Generate realistic Brain MRI volume (T1 post-contrast)
+ * Based on proper MRI physics and anatomical accuracy
  */
 function generateBrainMRI(width: number, height: number, depth: number, config: CaseImagingConfig): { data: Float32Array; mask: Uint8Array } {
   const data = new Float32Array(width * height * depth);
   const mask = new Uint8Array(width * height * depth);
   
-  const cx = width / 2, cy = height / 2, cz = depth / 2;
+  // T1 post-contrast signal intensities (normalized 0-1000 scale)
+  const T1 = {
+    AIR: 0,
+    CSF: 80,                  // Dark on T1
+    GRAY_MATTER: 480,         // Cortex
+    WHITE_MATTER: 620,        // Brighter than GM
+    DEEP_GRAY: 450,           // Basal ganglia
+    SKULL_CORTEX: 80,         // Dark cortical bone
+    SKULL_DIPLOE: 700,        // Bright marrow
+    SCALP_FAT: 850,           // Very bright
+    SCALP_MUSCLE: 400,
+    DURA: 650,                // Enhances
+    VESSEL: 750,              // Enhanced vessels
+    TUMOR_ENHANCE: 900,       // Ring enhancement
+    TUMOR_NECROSIS: 120,      // Dark center
+    TUMOR_SOLID: 520,
+    EDEMA: 350,               // Hypointense
+  };
   
   for (let z = 0; z < depth; z++) {
+    const nz = z / depth;  // 0 = inferior slices, 1 = vertex
+    
     for (let y = 0; y < height; y++) {
+      const ny = y / height;  // 0 = anterior, 1 = posterior
+      
       for (let x = 0; x < width; x++) {
+        const nx = x / width;  // 0 = right, 1 = left
         const idx = z * height * width + y * width + x;
-        let intensity = 0;
         
-        // Skull (outer)
-        const skullOuterDist = ellipsoidSDF(x, y, z, cx, cy, cz, width * 0.42, height * 0.45, depth * 0.42);
-        const skullInnerDist = ellipsoidSDF(x, y, z, cx, cy, cz, width * 0.38, height * 0.41, depth * 0.38);
+        let signal = T1.AIR;
         
-        if (skullOuterDist < 0 && skullInnerDist >= 0) {
-          intensity = MRI.BONE; // Skull
-        } else if (skullInnerDist < 0) {
-          // Inside brain
-          // Gray matter (cortex)
-          const cortexDist = ellipsoidSDF(x, y, z, cx, cy, cz, width * 0.36, height * 0.39, depth * 0.36);
-          
-          if (cortexDist > -width * 0.03) {
-            intensity = MRI.BRAIN_GM + smoothNoise(x * 0.2, y * 0.2, z * 0.2) * 50;
+        // Scalp outer boundary
+        const scalpDist = ellipsoidSDF(nx, ny, nz, 0.5, 0.52, 0.5, 0.47, 0.48, 0.46);
+        // Skull outer
+        const skullOuterDist = ellipsoidSDF(nx, ny, nz, 0.5, 0.52, 0.5, 0.44, 0.45, 0.43);
+        // Skull inner
+        const skullInnerDist = ellipsoidSDF(nx, ny, nz, 0.5, 0.52, 0.5, 0.40, 0.41, 0.39);
+        
+        // Brain parenchyma boundary  
+        const brainDist = ellipsoidSDF(nx, ny, nz, 0.5, 0.52, 0.5, 0.38, 0.39, 0.37);
+        
+        // === SCALP ===
+        if (scalpDist < 0 && skullOuterDist >= 0) {
+          const depth_in_scalp = -scalpDist / 0.03;
+          if (depth_in_scalp < 0.4) {
+            signal = T1.SCALP_MUSCLE + fbmNoise(nx * 15, ny * 15, nz * 12, 2) * 30;
           } else {
-            // White matter
-            intensity = MRI.BRAIN_WM + smoothNoise(x * 0.15, y * 0.15, z * 0.15) * 40;
+            signal = T1.SCALP_FAT + fbmNoise(nx * 12, ny * 12, nz * 10, 2) * 40;
           }
-          
-          // Ventricles (CSF)
-          const latVentRightDist = ellipsoidSDF(x, y, z, cx + width * 0.06, cy + height * 0.05, cz, width * 0.04, height * 0.12, depth * 0.15);
-          const latVentLeftDist = ellipsoidSDF(x, y, z, cx - width * 0.06, cy + height * 0.05, cz, width * 0.04, height * 0.12, depth * 0.15);
-          const thirdVentDist = ellipsoidSDF(x, y, z, cx, cy + height * 0.08, cz, width * 0.015, height * 0.06, depth * 0.08);
-          
-          if (latVentRightDist < 0 || latVentLeftDist < 0 || thirdVentDist < 0) {
-            intensity = MRI.CSF;
+        }
+        // === SKULL (3-layer) ===
+        else if (skullOuterDist < 0 && skullInnerDist >= 0) {
+          const skull_depth = -skullOuterDist / (-skullOuterDist + skullInnerDist + 0.001);
+          if (skull_depth < 0.25) {
+            signal = T1.SKULL_CORTEX;
+          } else if (skull_depth < 0.75) {
+            signal = T1.SKULL_DIPLOE + fbmNoise(nx * 10, ny * 10, nz * 8, 2) * 60;
+          } else {
+            signal = T1.SKULL_CORTEX;
           }
-          
-          // Deep gray matter structures
-          const thalamusDist = ellipsoidSDF(x, y, z, cx, cy + height * 0.05, cz, width * 0.06, height * 0.04, depth * 0.06);
-          if (thalamusDist < 0) {
-            intensity = MRI.BRAIN_GM + 30;
+        }
+        // === INTRACRANIAL ===
+        else if (skullInnerDist < 0) {
+          // Subarachnoid CSF
+          if (brainDist >= 0 && brainDist < 0.015) {
+            signal = T1.CSF + fbmNoise(nx * 20, ny * 20, nz * 15, 2) * 15;
+          }
+          // Falx cerebri (midline dura)
+          else if (Math.abs(nx - 0.5) < 0.006 && brainDist < 0 && nz > 0.25) {
+            signal = T1.DURA;
+          }
+          // Tentorium
+          else if (Math.abs(nz - 0.30) < 0.012 && ny > 0.45 && brainDist < 0) {
+            signal = T1.DURA;
+          }
+          // Lateral ventricles
+          else if (
+            ellipsoidSDF(nx, ny, nz, 0.42, 0.48, 0.52, 0.035, 0.10, 0.14) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.58, 0.48, 0.52, 0.035, 0.10, 0.14) < 0 ||
+            // Frontal horns
+            ellipsoidSDF(nx, ny, nz, 0.44, 0.40, 0.55, 0.022, 0.035, 0.05) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.56, 0.40, 0.55, 0.022, 0.035, 0.05) < 0 ||
+            // Third ventricle
+            ellipsoidSDF(nx, ny, nz, 0.50, 0.52, 0.48, 0.012, 0.04, 0.07) < 0 ||
+            // Fourth ventricle
+            ellipsoidSDF(nx, ny, nz, 0.50, 0.68, 0.28, 0.018, 0.025, 0.035) < 0
+          ) {
+            signal = T1.CSF + fbmNoise(nx * 25, ny * 25, nz * 20, 2) * 10;
+          }
+          // Deep gray (thalamus, basal ganglia)
+          else if (
+            ellipsoidSDF(nx, ny, nz, 0.44, 0.54, 0.48, 0.035, 0.035, 0.045) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.56, 0.54, 0.48, 0.035, 0.035, 0.045) < 0 ||
+            // Caudate
+            ellipsoidSDF(nx, ny, nz, 0.40, 0.46, 0.54, 0.018, 0.05, 0.07) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.60, 0.46, 0.54, 0.018, 0.05, 0.07) < 0 ||
+            // Putamen/GP
+            ellipsoidSDF(nx, ny, nz, 0.36, 0.50, 0.50, 0.025, 0.035, 0.045) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.64, 0.50, 0.50, 0.025, 0.035, 0.045) < 0
+          ) {
+            signal = T1.DEEP_GRAY + fbmNoise(nx * 20, ny * 20, nz * 15, 2) * 25;
+          }
+          // Corpus callosum (white matter)
+          else if (ellipsoidSDF(nx, ny, nz, 0.50, 0.47, 0.55, 0.08, 0.018, 0.15) < 0) {
+            signal = T1.WHITE_MATTER + fbmNoise(nx * 18, ny * 18, nz * 14, 2) * 20;
+          }
+          // Brainstem
+          else if (
+            ellipsoidSDF(nx, ny, nz, 0.50, 0.62, 0.34, 0.035, 0.035, 0.045) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.50, 0.68, 0.26, 0.04, 0.035, 0.045) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.50, 0.72, 0.20, 0.025, 0.025, 0.04) < 0
+          ) {
+            signal = T1.WHITE_MATTER * 0.92 + fbmNoise(nx * 15, ny * 15, nz * 12, 2) * 25;
+          }
+          // Cerebellum
+          else if (
+            ellipsoidSDF(nx, ny, nz, 0.38, 0.70, 0.26, 0.09, 0.07, 0.09) < 0 ||
+            ellipsoidSDF(nx, ny, nz, 0.62, 0.70, 0.26, 0.09, 0.07, 0.09) < 0
+          ) {
+            // Cerebellar folia pattern
+            const folia = Math.sin(nx * 80) * Math.sin(nz * 50) * 0.5 + 0.5;
+            signal = folia > 0.5 
+              ? T1.WHITE_MATTER + fbmNoise(nx * 25, ny * 25, nz * 20, 2) * 15
+              : T1.GRAY_MATTER + fbmNoise(nx * 25, ny * 25, nz * 20, 2) * 20;
+          }
+          // Cerebral cortex and white matter
+          else if (brainDist < 0) {
+            // Cortical ribbon with gyri/sulci
+            const gyri = fbmNoise(nx * 10, ny * 10, nz * 8, 4) * 0.02;
+            const cortex_thickness = 0.022 + gyri;
+            
+            if (-brainDist < cortex_thickness) {
+              // Gray matter cortex
+              signal = T1.GRAY_MATTER + fbmNoise(nx * 20, ny * 20, nz * 15, 3) * 30;
+            } else {
+              // White matter
+              signal = T1.WHITE_MATTER + fbmNoise(nx * 12, ny * 12, nz * 10, 3) * 25;
+            }
+          }
+          // Extra-axial CSF
+          else {
+            signal = T1.CSF;
           }
         }
         
-        data[idx] = intensity;
+        data[idx] = signal;
       }
     }
   }
