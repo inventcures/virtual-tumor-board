@@ -37,3 +37,4 @@ papers/
 # R2 credentials (keep secret!)
 .env.r2
 r2-credentials.txt
+.wrangler/
