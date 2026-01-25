@@ -20,7 +20,10 @@ import {
   Disc,
   Scan,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Eye,
+  Maximize2,
+  FileSearch
 } from "lucide-react";
 import type { UploadSession, UploadedDocument, DocumentType, UploadedImagingStudy, UploadSessionV6 } from "@/types/user-upload";
 import type { ImagingStudy, MedGemmaResponse, CapturedImage } from "@/types/imaging";
@@ -289,6 +292,7 @@ export default function DocumentUploadPage() {
   const [isAnalyzingImaging, setIsAnalyzingImaging] = useState(false);
   const [imagingConsentAccepted, setImagingConsentAccepted] = useState(false);
   const [showImagingConsent, setShowImagingConsent] = useState(true);
+  const [selectedStudyForView, setSelectedStudyForView] = useState<UploadedImagingStudy | null>(null);
   
   // Refs for performance
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1170,21 +1174,33 @@ export default function DocumentUploadPage() {
 
                 {/* Uploaded Imaging Studies List */}
                 {imagingStudies.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <h4 className="text-sm font-medium text-white">Uploaded Scans</h4>
                     {imagingStudies.map((item) => (
-                      <div
+                      <button
                         key={item.study.id}
-                        className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl border border-slate-700/50"
+                        onClick={() => item.status === 'complete' && setSelectedStudyForView(item)}
+                        className={`w-full flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl border transition-all text-left ${
+                          item.status === 'complete' 
+                            ? 'border-cyan-500/50 hover:border-cyan-400 hover:bg-slate-800/80 cursor-pointer' 
+                            : 'border-slate-700/50'
+                        }`}
                       >
                         {/* Thumbnail */}
-                        <div className="w-12 h-12 rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <div className="w-14 h-14 rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden flex-shrink-0 relative">
                           {item.study.thumbnailDataUrl ? (
-                            <img
-                              src={item.study.thumbnailDataUrl}
-                              alt={item.study.description}
-                              className="w-full h-full object-cover"
-                            />
+                            <>
+                              <img
+                                src={item.study.thumbnailDataUrl}
+                                alt={item.study.description}
+                                className="w-full h-full object-cover"
+                              />
+                              {item.status === 'complete' && (
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                  <Eye className="w-5 h-5 text-white" />
+                                </div>
+                              )}
+                            </>
                           ) : (
                             <Scan className="w-6 h-6 text-slate-500" />
                           )}
@@ -1196,14 +1212,18 @@ export default function DocumentUploadPage() {
                             {item.study.description || item.study.modality}
                           </p>
                           <p className="text-xs text-slate-400">
-                            {item.study.source === 'dicom' ? 'DICOM' : 
+                            {item.study.source === 'dicom' ? 'DICOM/NIfTI' : 
                              item.study.source === 'photo' ? 'Camera' : 'Gallery'}
-                            {' '}|{' '}
-                            {item.status === 'analyzing' && 'Analyzing...'}
-                            {item.status === 'complete' && 'AI Analysis Complete'}
-                            {item.status === 'error' && 'Analysis Failed'}
-                            {item.status === 'pending' && 'Pending'}
                           </p>
+                          {item.status === 'complete' && item.medgemmaAnalysis && (
+                            <p className="text-xs text-cyan-400 mt-1 flex items-center gap-1">
+                              <FileSearch className="w-3 h-3" />
+                              Tap to view AI analysis
+                            </p>
+                          )}
+                          {item.status === 'analyzing' && (
+                            <p className="text-xs text-amber-400 mt-1">Analyzing with MedGemma...</p>
+                          )}
                         </div>
 
                         {/* Status Icon */}
@@ -1211,39 +1231,26 @@ export default function DocumentUploadPage() {
                           <Loader2 className="w-5 h-5 text-cyan-400 animate-spin flex-shrink-0" />
                         )}
                         {item.status === 'complete' && (
-                          <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                          </div>
                         )}
                         {item.status === 'error' && (
                           <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                         )}
 
-                        {/* Remove Button */}
+                        {/* Remove Button - stop propagation */}
                         <button
-                          onClick={() => removeImagingStudy(item.study.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeImagingStudy(item.study.id);
+                          }}
                           className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors"
                         >
                           <X className="w-4 h-4 text-slate-500" />
                         </button>
-                      </div>
+                      </button>
                     ))}
-
-                    {/* MedGemma Analysis Preview */}
-                    {imagingStudies.some(s => s.medgemmaAnalysis) && (
-                      <div className="mt-3 p-3 bg-cyan-900/20 rounded-xl border border-cyan-700/30">
-                        <h5 className="text-xs font-medium text-cyan-400 mb-2">AI Analysis Summary</h5>
-                        {imagingStudies.filter(s => s.medgemmaAnalysis).map(s => (
-                          <div key={s.study.id} className="text-xs text-slate-300">
-                            <p className="font-medium text-white">{s.study.description}:</p>
-                            <p className="text-slate-400 line-clamp-2">
-                              {s.medgemmaAnalysis?.impression || s.medgemmaAnalysis?.interpretation}
-                            </p>
-                          </div>
-                        ))}
-                        <p className="text-[10px] text-slate-500 mt-2">
-                          Full analysis will be reviewed by Dr. Chitran (AI Radiologist)
-                        </p>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -1266,10 +1273,10 @@ export default function DocumentUploadPage() {
 
           <button
             onClick={handleContinue}
-            disabled={documents.length === 0 || processingStatus.isProcessing}
+            disabled={(documents.length === 0 && imagingStudies.length === 0) || processingStatus.isProcessing}
             className={`
               flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 sm:px-6 py-2 rounded-lg font-semibold transition-all touch-manipulation text-sm
-              ${documents.length > 0 && !processingStatus.isProcessing
+              ${(documents.length > 0 || imagingStudies.length > 0) && !processingStatus.isProcessing
                 ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg active:scale-[0.98]"
                 : "bg-slate-800 text-slate-500 cursor-not-allowed"
               }
@@ -1407,6 +1414,183 @@ export default function DocumentUploadPage() {
             <p className="text-[10px] sm:text-xs text-slate-500 text-center mt-3">
               ⚡ Keep app open • Processing on-device for privacy
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* MedGemma Analysis Modal - Full Screen */}
+      {selectedStudyForView && (
+        <div 
+          className="fixed inset-0 bg-black/90 z-50 flex flex-col"
+          onClick={() => setSelectedStudyForView(null)}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-900/95">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-cyan-600/20 flex items-center justify-center">
+                <Brain className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-white">AI Analysis Results</h2>
+                <p className="text-xs text-slate-400">MedGemma Medical Imaging AI</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedStudyForView(null)}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
+
+          {/* Content - Scrollable */}
+          <div 
+            className="flex-1 overflow-y-auto p-4 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Image Preview */}
+            <div className="bg-slate-900 rounded-xl p-4 flex items-center justify-center">
+              {selectedStudyForView.study.thumbnailDataUrl ? (
+                <img
+                  src={selectedStudyForView.study.thumbnailDataUrl}
+                  alt="Scan"
+                  className="max-h-64 rounded-lg"
+                />
+              ) : (
+                <div className="w-32 h-32 bg-slate-800 rounded-lg flex items-center justify-center">
+                  <Scan className="w-12 h-12 text-slate-600" />
+                </div>
+              )}
+            </div>
+
+            {/* Study Info */}
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+              <h3 className="text-sm font-medium text-slate-300 mb-2">Study Information</h3>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-slate-500">Modality:</span>
+                  <span className="text-white ml-2">{selectedStudyForView.study.modality}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-white ml-2 capitalize">{selectedStudyForView.study.source}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-slate-500">Description:</span>
+                  <span className="text-white ml-2">{selectedStudyForView.study.description}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* MedGemma Analysis */}
+            {selectedStudyForView.medgemmaAnalysis && (
+              <>
+                {/* Impression - Most Important */}
+                <div className="bg-gradient-to-r from-cyan-900/40 to-indigo-900/40 rounded-xl p-4 border border-cyan-500/30">
+                  <h3 className="text-sm font-semibold text-cyan-400 mb-2 flex items-center gap-2">
+                    <Brain className="w-4 h-4" />
+                    AI Impression
+                  </h3>
+                  <p className="text-white text-sm leading-relaxed">
+                    {selectedStudyForView.medgemmaAnalysis.impression || 
+                     selectedStudyForView.medgemmaAnalysis.interpretation ||
+                     'No impression available'}
+                  </p>
+                </div>
+
+                {/* Findings */}
+                {selectedStudyForView.medgemmaAnalysis.findings && 
+                 selectedStudyForView.medgemmaAnalysis.findings.length > 0 && (
+                  <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                    <h3 className="text-sm font-medium text-slate-300 mb-3">Findings</h3>
+                    <div className="space-y-2">
+                      {selectedStudyForView.medgemmaAnalysis.findings.map((finding, idx) => (
+                        <div key={idx} className="flex items-start gap-2 text-sm">
+                          <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                            finding.severity === 'severe' ? 'bg-red-400' :
+                            finding.severity === 'moderate' ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`} />
+                          <div>
+                            <p className="text-white">{finding.description}</p>
+                            {finding.location && (
+                              <p className="text-xs text-slate-400">Location: {finding.location}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Measurements */}
+                {selectedStudyForView.medgemmaAnalysis.measurements && 
+                 selectedStudyForView.medgemmaAnalysis.measurements.length > 0 && (
+                  <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                    <h3 className="text-sm font-medium text-slate-300 mb-3">Measurements</h3>
+                    <div className="space-y-2">
+                      {selectedStudyForView.medgemmaAnalysis.measurements.map((m, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm bg-slate-900/50 rounded-lg p-2">
+                          <span className="text-slate-300">{m.description}</span>
+                          <span className="text-white font-medium">
+                            {m.dimensions.long}mm
+                            {m.dimensions.short && ` × ${m.dimensions.short}mm`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommendations */}
+                {selectedStudyForView.medgemmaAnalysis.recommendations && 
+                 selectedStudyForView.medgemmaAnalysis.recommendations.length > 0 && (
+                  <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                    <h3 className="text-sm font-medium text-slate-300 mb-3">Recommendations</h3>
+                    <ul className="space-y-1.5">
+                      {selectedStudyForView.medgemmaAnalysis.recommendations.map((rec, idx) => (
+                        <li key={idx} className="text-sm text-slate-300 flex items-start gap-2">
+                          <span className="text-cyan-400">•</span>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Confidence */}
+                <div className="bg-slate-800/30 rounded-xl p-3 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">AI Confidence</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full"
+                        style={{ width: `${(selectedStudyForView.medgemmaAnalysis.confidence || 0.5) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm text-white font-medium">
+                      {Math.round((selectedStudyForView.medgemmaAnalysis.confidence || 0.5) * 100)}%
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Disclaimer */}
+            <div className="bg-amber-900/20 rounded-xl p-3 border border-amber-500/20">
+              <p className="text-xs text-amber-300 text-center">
+                ⚠️ AI analysis is for educational purposes only. Not a substitute for professional radiologist interpretation.
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-slate-700 bg-slate-900/95">
+            <button
+              onClick={() => setSelectedStudyForView(null)}
+              className="w-full py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white rounded-xl font-semibold"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}
