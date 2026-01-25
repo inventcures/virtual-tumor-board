@@ -7,6 +7,13 @@ export { MedGemmaPanel } from './MedGemmaPanel';
 export { ReconciliationPanel } from './ReconciliationPanel';
 export { ProgressionTimeline } from './ProgressionTimeline';
 
+// OncoSeg 3D Tumor Segmentation
+export { 
+  OncoSegPanel, 
+  OncoSegLoading, 
+  OncoSegCheckpointSelector 
+} from './OncoSegPanel';
+
 // V8 Phase 3: Progressive Disclosure Visualization System
 export { DiseaseProgressionViz } from './DiseaseProgressionViz';
 export type { ExpertiseLevel } from './DiseaseProgressionViz';

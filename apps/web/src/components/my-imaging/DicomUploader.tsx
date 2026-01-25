@@ -12,13 +12,15 @@
 import { useState, useCallback, useRef } from "react";
 import { 
   Upload, Disc, FolderOpen, X, CheckCircle, 
-  AlertCircle, Loader2, FileImage, ChevronLeft, Brain
+  AlertCircle, Loader2, FileImage, ChevronLeft, Brain, Target
 } from "lucide-react";
 import { ImagingStudy } from "@/types/imaging";
+import { OncoSegCheckpoint, CHECKPOINT_INFO } from "@/lib/oncoseg";
 
 interface DicomUploaderProps {
-  onUpload: (study: ImagingStudy, imageData: string) => void;
+  onUpload: (study: ImagingStudy, imageData: string, niftiBase64?: string) => void;
   onCancel: () => void;
+  enableOncoSeg?: boolean; // Enable 3D tumor segmentation for NIfTI files
 }
 
 interface ProcessedFile {
@@ -38,11 +40,15 @@ interface ProcessedFile {
   };
 }
 
-export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
+export function DicomUploader({ onUpload, onCancel, enableOncoSeg = true }: DicomUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedImageData, setProcessedImageData] = useState<string | null>(null);
+  const [niftiBase64Data, setNiftiBase64Data] = useState<string | null>(null);
+  const [isNiftiFile, setIsNiftiFile] = useState(false);
+  const [selectedCheckpoint, setSelectedCheckpoint] = useState<OncoSegCheckpoint>('brain');
+  const [runOncoSeg, setRunOncoSeg] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -73,6 +79,7 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
   // Process NIfTI files (.nii, .nii.gz)
   const processNiftiFiles = async (niftiFiles: File[]) => {
     setIsProcessing(true);
+    setIsNiftiFile(true);
     setFiles([{
       name: niftiFiles[0].name,
       status: 'processing',
@@ -81,7 +88,16 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
 
     try {
       const file = niftiFiles[0];
-      let arrayBuffer = await file.arrayBuffer();
+      const originalArrayBuffer = await file.arrayBuffer();
+      let arrayBuffer = originalArrayBuffer;
+      
+      // Store original file as base64 for OncoSeg (before any decompression for preview)
+      const originalBytes = new Uint8Array(originalArrayBuffer);
+      let binary = '';
+      for (let i = 0; i < originalBytes.byteLength; i++) {
+        binary += String.fromCharCode(originalBytes[i]);
+      }
+      setNiftiBase64Data(btoa(binary));
       
       // Decompress if .nii.gz
       if (file.name.toLowerCase().endsWith('.gz')) {
@@ -347,15 +363,19 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
       modality: metadata.modality || 'CT',
       bodyPart: metadata.bodyPart || 'Unknown',
       description: `${metadata.modality || 'DICOM'} - ${files.length} files`,
-      sliceCount: files.length,
-      source: 'dicom',
+      sliceCount: metadata.slices || files.length,
+      source: isNiftiFile ? 'nifti' : 'dicom',
       measurements: [],
       isBaseline: true,
       timepoint: 'baseline',
       thumbnailDataUrl: processedImageData,
+      // OncoSeg metadata
+      oncoSegCheckpoint: isNiftiFile && runOncoSeg ? selectedCheckpoint : undefined,
     };
 
-    onUpload(study, processedImageData);
+    // Pass NIfTI base64 data for OncoSeg processing if enabled
+    const niftiData = isNiftiFile && runOncoSeg ? niftiBase64Data || undefined : undefined;
+    onUpload(study, processedImageData, niftiData);
   };
 
   return (
@@ -475,6 +495,54 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
               />
             </div>
           )}
+
+          {/* OncoSeg Options (for NIfTI files) */}
+          {isNiftiFile && enableOncoSeg && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-rose-900/20 to-slate-900/20 border border-rose-500/20 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-rose-400" />
+                  <h4 className="font-medium text-white">3D Tumor Segmentation</h4>
+                  <span className="px-2 py-0.5 text-xs bg-rose-500/20 text-rose-400 rounded-full">
+                    OncoSeg
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={runOncoSeg}
+                    onChange={(e) => setRunOncoSeg(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-rose-500 focus:ring-rose-500"
+                  />
+                  <span className="text-sm text-slate-300">Enable</span>
+                </label>
+              </div>
+              
+              {runOncoSeg && (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-400">
+                    Select the model checkpoint for your imaging type:
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {(Object.entries(CHECKPOINT_INFO) as [OncoSegCheckpoint, typeof CHECKPOINT_INFO[OncoSegCheckpoint]][]).map(([id, info]) => (
+                      <button
+                        key={id}
+                        onClick={() => setSelectedCheckpoint(id)}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          selectedCheckpoint === id
+                            ? 'border-rose-500 bg-rose-500/10'
+                            : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                        }`}
+                      >
+                        <p className="font-medium text-white text-sm">{info.name}</p>
+                        <p className="text-xs text-slate-400">{info.modality}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -495,6 +563,11 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
               Processing...
+            </>
+          ) : isNiftiFile && runOncoSeg ? (
+            <>
+              <Target className="w-4 h-4" />
+              Segment & Analyze
             </>
           ) : (
             <>

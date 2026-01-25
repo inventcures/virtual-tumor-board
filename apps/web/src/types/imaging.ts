@@ -83,13 +83,35 @@ export interface ImagingStudy {
   bodyPart: string;
   description: string;
   sliceCount: number;
-  source: 'dicom' | 'photo' | 'gallery';
+  source: 'dicom' | 'nifti' | 'photo' | 'gallery';
   storageKey?: string;  // R2 object key
   medgemmaAnalysis?: MedGemmaResponse;
+  oncoSegAnalysis?: OncoSegAnalysis; // 3D tumor segmentation results
+  oncoSegCheckpoint?: string; // Which OncoSeg model to use
   measurements: Measurement[];
   isBaseline: boolean;
   timepoint: 'baseline' | 'follow-up' | 'response-assessment';
   thumbnailDataUrl?: string;
+  // NIfTI-specific metadata
+  dimensions?: [number, number, number]; // x, y, z voxels
+  voxelSpacing?: [number, number, number]; // x, y, z in mm
+}
+
+// OncoSeg 3D Tumor Segmentation Results
+export interface OncoSegAnalysis {
+  success: boolean;
+  error?: string;
+  backend: 'sam3' | 'fallback';
+  checkpoint: string;
+  contours: Record<string, Contour[]>; // slice index -> contours
+  numSlices: number;
+  slicesWithTumor: string[];
+  tumorVolume?: { volumeMm3: number; volumeCc: number };
+  inferenceTimeMs: number;
+}
+
+export interface Contour {
+  points: [number, number][];
 }
 
 // RECIST Types
@@ -228,7 +250,7 @@ export interface MedGemmaImageInput {
     totalSlices?: number;
     windowCenter?: number;
     windowWidth?: number;
-    source: 'dicom' | 'photo' | 'gallery';
+    source: 'dicom' | 'nifti' | 'photo' | 'gallery';
   };
 }
 

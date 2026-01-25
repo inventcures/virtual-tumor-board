@@ -16,9 +16,11 @@ import { DicomUploader } from "./DicomUploader";
 import { CameraCapture } from "./CameraCapture";
 import { GalleryUpload } from "./GalleryUpload";
 import { MedGemmaPanel } from "./MedGemmaPanel";
+import { OncoSegPanel, OncoSegLoading } from "./OncoSegPanel";
 import { 
   ImagingStudy, 
   MedGemmaResponse, 
+  OncoSegAnalysis,
   UploadedFile,
   CapturedImage
 } from "@/types/imaging";
@@ -34,14 +36,21 @@ export function MyImagingTab({ caseId, onImagingReady }: MyImagingTabProps) {
   const [uploadMethod, setUploadMethod] = useState<UploadMethod>('select');
   const [currentStudy, setCurrentStudy] = useState<ImagingStudy | null>(null);
   const [medgemmaAnalysis, setMedgemmaAnalysis] = useState<MedGemmaResponse | null>(null);
+  const [oncoSegAnalysis, setOncoSegAnalysis] = useState<OncoSegAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSegmenting, setIsSegmenting] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [showConsent, setShowConsent] = useState(true);
 
-  const handleDicomUpload = useCallback(async (study: ImagingStudy, imageData: string) => {
+  const handleDicomUpload = useCallback(async (study: ImagingStudy, imageData: string, niftiBase64?: string) => {
     setCurrentStudy(study);
     setUploadMethod('select');
+    
+    // Run OncoSeg segmentation for NIfTI files if checkpoint is specified
+    if (niftiBase64 && study.oncoSegCheckpoint) {
+      await segmentWithOncoSeg(niftiBase64, study);
+    }
     
     // Trigger MedGemma analysis
     await analyzeWithMedGemma(imageData, study);
@@ -95,6 +104,43 @@ export function MyImagingTab({ caseId, onImagingReady }: MyImagingTabProps) {
     await analyzeWithMedGemma(imageDataUrl, study);
   }, []);
 
+  // OncoSeg 3D Tumor Segmentation
+  const segmentWithOncoSeg = async (niftiBase64: string, study: ImagingStudy) => {
+    setIsSegmenting(true);
+    
+    try {
+      console.log(`[OncoSeg] Starting segmentation with checkpoint: ${study.oncoSegCheckpoint}`);
+      
+      const response = await fetch('/api/imaging/segment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          niftiBase64,
+          checkpoint: study.oncoSegCheckpoint,
+          segmentVolume: true, // Segment all slices
+          voxelSpacing: study.voxelSpacing || [1, 1, 1], // Default 1mm isotropic
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setOncoSegAnalysis(result);
+        // Update study with segmentation results
+        setCurrentStudy(prev => prev ? { ...prev, oncoSegAnalysis: result } : null);
+        console.log(`[OncoSeg] Segmentation complete: ${result.slicesWithTumor?.length || 0} slices with tumor`);
+      } else {
+        console.warn('[OncoSeg] Segmentation failed:', result.error);
+        // Don't set error state - MedGemma can still proceed
+      }
+    } catch (error) {
+      console.error('[OncoSeg] Segmentation error:', error);
+      // Non-blocking - MedGemma analysis can still proceed
+    } finally {
+      setIsSegmenting(false);
+    }
+  };
+
   const analyzeWithMedGemma = async (imageData: string, study: ImagingStudy) => {
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -133,6 +179,7 @@ export function MyImagingTab({ caseId, onImagingReady }: MyImagingTabProps) {
   const handleReset = () => {
     setCurrentStudy(null);
     setMedgemmaAnalysis(null);
+    setOncoSegAnalysis(null);
     setUploadMethod('select');
     setAnalysisError(null);
   };
@@ -261,6 +308,17 @@ export function MyImagingTab({ caseId, onImagingReady }: MyImagingTabProps) {
             
             {/* Analysis Panel */}
             <div className="space-y-4">
+              {/* OncoSeg Segmentation Results */}
+              {isSegmenting ? (
+                <OncoSegLoading />
+              ) : oncoSegAnalysis ? (
+                <OncoSegPanel 
+                  result={oncoSegAnalysis}
+                  imageDataUrl={currentStudy.thumbnailDataUrl}
+                />
+              ) : null}
+              
+              {/* MedGemma Analysis Results */}
               {isAnalyzing ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mb-4" />
