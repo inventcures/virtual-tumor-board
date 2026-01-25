@@ -1,14 +1,18 @@
 "use client";
 
 /**
- * DicomUploader - DICOM file upload with drag-drop support
- * Parses DICOM files in browser using dicom-parser
+ * DicomUploader - DICOM and NIfTI file upload with drag-drop support
+ * Supports:
+ * - DICOM files (.dcm, .dicom, no extension)
+ * - NIfTI files (.nii, .nii.gz) - common in neuroimaging/research
+ * 
+ * Parses files in browser using dicom-parser and nifti-reader-js
  */
 
 import { useState, useCallback, useRef } from "react";
 import { 
   Upload, Disc, FolderOpen, X, CheckCircle, 
-  AlertCircle, Loader2, FileImage, ChevronLeft
+  AlertCircle, Loader2, FileImage, ChevronLeft, Brain
 } from "lucide-react";
 import { ImagingStudy } from "@/types/imaging";
 
@@ -21,6 +25,7 @@ interface ProcessedFile {
   name: string;
   status: 'pending' | 'processing' | 'complete' | 'error';
   error?: string;
+  fileType: 'dicom' | 'nifti' | 'image';
   metadata?: {
     patientName?: string;
     studyDate?: string;
@@ -28,6 +33,8 @@ interface ProcessedFile {
     bodyPart?: string;
     rows?: number;
     cols?: number;
+    slices?: number; // For NIfTI volumes
+    dimensions?: [number, number, number]; // x, y, z dimensions
   };
 }
 
@@ -63,7 +70,134 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
     }
   }, []);
 
+  // Process NIfTI files (.nii, .nii.gz)
+  const processNiftiFiles = async (niftiFiles: File[]) => {
+    setIsProcessing(true);
+    setFiles([{
+      name: niftiFiles[0].name,
+      status: 'processing',
+      fileType: 'nifti'
+    }]);
+
+    try {
+      const file = niftiFiles[0];
+      let arrayBuffer = await file.arrayBuffer();
+      
+      // Decompress if .nii.gz
+      if (file.name.toLowerCase().endsWith('.gz')) {
+        const pako = await import('pako');
+        const decompressed = pako.inflate(new Uint8Array(arrayBuffer));
+        arrayBuffer = decompressed.buffer;
+      }
+      
+      // Dynamic import of nifti-reader-js
+      const nifti = await import('nifti-reader-js');
+      
+      if (!nifti.isNIFTI(arrayBuffer)) {
+        throw new Error('Invalid NIfTI file');
+      }
+      
+      const header = nifti.readHeader(arrayBuffer);
+      const image = nifti.readImage(header, arrayBuffer);
+      
+      // Get dimensions
+      const dims = header.dims;
+      const nx = dims[1]; // x dimension
+      const ny = dims[2]; // y dimension  
+      const nz = dims[3]; // z dimension (slices)
+      
+      // Get middle slice for preview
+      const middleSlice = Math.floor(nz / 2);
+      const sliceSize = nx * ny;
+      const sliceOffset = middleSlice * sliceSize;
+      
+      // Create typed array based on datatype
+      let typedData: Float32Array | Int16Array | Uint8Array;
+      const datatype = header.datatypeCode;
+      
+      if (datatype === 16) { // Float32
+        typedData = new Float32Array(image);
+      } else if (datatype === 4) { // Int16
+        typedData = new Int16Array(image);
+      } else if (datatype === 2) { // Uint8
+        typedData = new Uint8Array(image);
+      } else {
+        // Default to Float32
+        typedData = new Float32Array(image);
+      }
+      
+      // Extract middle slice data
+      const sliceData = typedData.slice(sliceOffset, sliceOffset + sliceSize);
+      
+      // Find min/max for normalization
+      let min = Infinity, max = -Infinity;
+      for (let i = 0; i < sliceData.length; i++) {
+        if (sliceData[i] < min) min = sliceData[i];
+        if (sliceData[i] > max) max = sliceData[i];
+      }
+      
+      // Create canvas and render
+      const canvas = document.createElement('canvas');
+      canvas.width = nx;
+      canvas.height = ny;
+      const ctx = canvas.getContext('2d')!;
+      const imageData = ctx.createImageData(nx, ny);
+      
+      const range = max - min || 1;
+      for (let i = 0; i < sliceData.length; i++) {
+        const normalized = (sliceData[i] - min) / range;
+        const gray = Math.round(normalized * 255);
+        imageData.data[i * 4] = gray;
+        imageData.data[i * 4 + 1] = gray;
+        imageData.data[i * 4 + 2] = gray;
+        imageData.data[i * 4 + 3] = 255;
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      const dataUrl = canvas.toDataURL('image/png');
+      setProcessedImageData(dataUrl);
+      
+      // Update file status with metadata
+      setFiles([{
+        name: file.name,
+        status: 'complete',
+        fileType: 'nifti',
+        metadata: {
+          modality: 'MR', // NIfTI is typically MRI
+          bodyPart: 'Brain', // Most common for NIfTI
+          rows: ny,
+          cols: nx,
+          slices: nz,
+          dimensions: [nx, ny, nz],
+          studyDate: new Date().toISOString().split('T')[0],
+        }
+      }]);
+      
+    } catch (error) {
+      console.error('NIfTI parsing error:', error);
+      setFiles([{
+        name: niftiFiles[0].name,
+        status: 'error',
+        fileType: 'nifti',
+        error: 'Failed to parse NIfTI file'
+      }]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const processFiles = async (selectedFiles: File[]) => {
+    // Check for NIfTI files first (.nii, .nii.gz)
+    const niftiFiles = selectedFiles.filter(f => 
+      f.name.toLowerCase().endsWith('.nii') ||
+      f.name.toLowerCase().endsWith('.nii.gz')
+    );
+    
+    if (niftiFiles.length > 0) {
+      await processNiftiFiles(niftiFiles);
+      return;
+    }
+    
     // Filter for DICOM files (no extension or .dcm)
     const dicomFiles = selectedFiles.filter(f => 
       !f.name.includes('.') || 
@@ -89,6 +223,7 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
           setFiles([{
             name: imageFiles[0].name,
             status: 'complete',
+            fileType: 'image',
             metadata: { modality: 'OT' }
           }]);
         };
@@ -96,14 +231,15 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
         return;
       }
       
-      alert('Please select DICOM files (.dcm) or image files (JPG, PNG)');
+      alert('Please select DICOM (.dcm), NIfTI (.nii, .nii.gz), or image files (JPG, PNG)');
       return;
     }
 
     setIsProcessing(true);
     const processedFiles: ProcessedFile[] = dicomFiles.map(f => ({
       name: f.name,
-      status: 'pending' as const
+      status: 'pending' as const,
+      fileType: 'dicom' as const
     }));
     setFiles(processedFiles);
 
@@ -233,8 +369,8 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
           <ChevronLeft className="w-5 h-5 text-slate-400" />
         </button>
         <div>
-          <h2 className="text-lg font-semibold text-white">Upload DICOM Files</h2>
-          <p className="text-sm text-slate-400">From CD, USB drive, or digital copy</p>
+          <h2 className="text-lg font-semibold text-white">Upload Medical Imaging</h2>
+          <p className="text-sm text-slate-400">DICOM, NIfTI (.nii.gz), or images from CD/USB</p>
         </div>
       </div>
 
@@ -255,7 +391,7 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".dcm,.dicom,image/*"
+          accept=".dcm,.dicom,.nii,.nii.gz,image/*"
           onChange={handleFileSelect}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
@@ -265,16 +401,16 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
             <Disc className="w-8 h-8 text-indigo-400" />
           </div>
           <p className="text-white font-medium mb-2">
-            {isDragging ? 'Drop files here' : 'Drag & drop DICOM files'}
+            {isDragging ? 'Drop files here' : 'Drag & drop medical imaging files'}
           </p>
           <p className="text-sm text-slate-400 mb-4">or click to browse</p>
-          <div className="flex items-center justify-center gap-4 text-xs text-slate-500">
-            <span className="flex items-center gap-1">
-              <FolderOpen className="w-4 h-4" />
-              Folders supported
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
+            <span className="px-2 py-1 bg-slate-700/50 rounded">.dcm</span>
+            <span className="px-2 py-1 bg-slate-700/50 rounded">.dicom</span>
+            <span className="px-2 py-1 bg-cyan-700/30 text-cyan-400 rounded flex items-center gap-1">
+              <Brain className="w-3 h-3" />
+              .nii / .nii.gz
             </span>
-            <span>|</span>
-            <span>.dcm, .dicom files</span>
           </div>
         </div>
       </div>
@@ -292,12 +428,21 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
                 key={idx}
                 className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg"
               >
-                <FileImage className="w-5 h-5 text-slate-400" />
+                {file.fileType === 'nifti' ? (
+                  <Brain className="w-5 h-5 text-cyan-400" />
+                ) : (
+                  <FileImage className="w-5 h-5 text-slate-400" />
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white truncate">{file.name}</p>
                   {file.metadata && (
                     <p className="text-xs text-slate-400">
                       {file.metadata.modality} | {file.metadata.bodyPart}
+                      {file.metadata.dimensions && (
+                        <span className="ml-2 text-cyan-400">
+                          {file.metadata.dimensions.join(' × ')} voxels
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>
