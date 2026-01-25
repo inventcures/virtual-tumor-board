@@ -17,8 +17,7 @@ import {
   Download,
   Loader2
 } from "lucide-react";
-import { generatePDFReport, downloadPDF } from "@/lib/pdf-report";
-import { PDFPreviewModal } from "./PDFPreviewModal";
+import { PDFPreviewModalV2 } from "./PDFPreviewModalV2";
 
 interface AgentResponse {
   response: string;
@@ -51,8 +50,6 @@ export function ConsensusPanel({
   caseInfo?: { cancerSite?: string; stage?: string; documentCount?: number };
 }) {
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   const toggleAgent = useCallback((agentId: string) => {
@@ -75,26 +72,10 @@ export function ConsensusPanel({
     setExpandedAgents(new Set());
   }, []);
 
-  const handleDownloadPDF = useCallback(async () => {
+  const handleDownloadPDF = useCallback(() => {
     if (!consensus) return;
-    
-    setIsGeneratingPDF(true);
-    
-    try {
-      const blob = await generatePDFReport(consensus, agentResponses, {
-        cancerSite: caseInfo?.cancerSite,
-        stage: caseInfo?.stage,
-        documentCount: caseInfo?.documentCount,
-      });
-      setPdfBlob(blob);
-      setShowPDFPreview(true); // Show modal instead of direct download
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      alert('Failed to generate PDF. Please try again.');
-    } finally {
-      setIsGeneratingPDF(false);
-    }
-  }, [consensus, agentResponses, caseInfo]);
+    setShowPDFPreview(true);
+  }, [consensus]);
 
   if (!consensus && !isComplete) {
     return (
@@ -135,14 +116,9 @@ export function ConsensusPanel({
                 <>
                   <button
                     onClick={handleDownloadPDF}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
                   >
-                    {isGeneratingPDF ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
+                    <Download className="w-4 h-4" />
                     <span className="hidden sm:inline">Download Report</span>
                   </button>
                   <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
@@ -280,14 +256,16 @@ export function ConsensusPanel({
         )}
       </div>
 
-      {/* PDF Preview Modal */}
-      <PDFPreviewModal
+      {/* PDF Preview Modal with Literacy Level Selector */}
+      <PDFPreviewModalV2
         isOpen={showPDFPreview}
         onClose={() => setShowPDFPreview(false)}
-        pdfBlob={pdfBlob}
+        consensus={consensus || ''}
+        agentResponses={agentResponses}
         caseInfo={{
           cancerSite: caseInfo?.cancerSite,
           stage: caseInfo?.stage,
+          documentCount: caseInfo?.documentCount,
         }}
       />
     </div>
