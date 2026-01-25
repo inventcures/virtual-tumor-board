@@ -335,7 +335,16 @@ export async function POST(request: NextRequest) {
             
             // Build system prompt with user case additions
             const systemPrompt = `You are ${agent.name}, a ${agent.specialty} specialist on a virtual tumor board.
-Be concise, evidence-based, and cite NCCN, ESMO, or other relevant guidelines.
+
+IMPORTANT: Provide a COMPREHENSIVE, DETAILED response (at least 500-800 words). Structure your response with clear sections:
+1. Data Limitations (if any)
+2. Key Clinical Findings from Available Data
+3. Your Specialty-Specific Assessment
+4. Treatment Recommendations
+5. Recommended Additional Tests/Consultations
+6. Summary and Confidence Level
+
+Be evidence-based and cite NCCN, ESMO, or other relevant guidelines where applicable.
 Consider Indian healthcare context including drug availability and cost.
 ${getUserCaseSystemPromptAddition(uploadedTypes, missingDocs, session.userType)}`;
 
@@ -355,7 +364,7 @@ Provide your specialist assessment based on the available data. Structure your r
               const aiResponse = await callAI(
                 [{ role: "user", content: userPrompt }],
                 systemPrompt,
-                { maxTokens: 1500 }
+                { maxTokens: 4000 }  // Increased for full detailed responses
               );
               response = aiResponse.content;
             } catch (err) {
@@ -416,7 +425,7 @@ ${getUserCaseConsensusPrompt(uploadedTypes, missingDocs, session.userType)}`;
                 content: `Case Context:\n${caseContext}\n\nSpecialist Opinions:\n${agentSummary}\n\nSynthesize these opinions into a consensus recommendation following the required sections.`
               }],
               consensusSystemPrompt,
-              { maxTokens: 2500 }
+              { maxTokens: 4000 }  // Increased for comprehensive consensus
             );
             consensus = aiResponse.content;
           } catch (err) {
