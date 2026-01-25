@@ -33,3 +33,10 @@ coverage/
 # Turbo
 .turbo/
 papers/
+
+# Large generated imaging data (run scripts/download_sample_images.py to generate)
+apps/web/public/imaging/brain/*/
+apps/web/public/imaging/thorax/*/
+apps/web/public/imaging/abdomen/*/
+apps/web/public/imaging/pelvis/*/
+apps/web/public/imaging/head_neck/*/
