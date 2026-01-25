@@ -119,9 +119,9 @@ async function callGemini(
   }));
 
   // Gemini uses system instruction separately
-  // Using gemini-1.5-flash as it's more widely available than gemini-1.5-pro
+  // Using gemini-3-pro-preview - the latest and most capable model
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -156,7 +156,7 @@ async function callGemini(
   return {
     content: text,
     provider: 'gemini',
-    model: 'gemini-1.5-flash',
+    model: 'gemini-3-pro-preview',
     tokensUsed: data.usageMetadata?.totalTokenCount,
   };
 }
