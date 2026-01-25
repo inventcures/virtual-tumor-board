@@ -862,7 +862,7 @@ export default function DocumentUploadPage() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-48">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-20">
         {/* Progress indicator */}
         <div className="mb-4 sm:mb-8">
           <div className="flex items-center justify-between text-xs sm:text-sm text-slate-400 mb-2">
@@ -1252,23 +1252,23 @@ export default function DocumentUploadPage() {
         </div>
       </main>
 
-      {/* Fixed bottom navigation - MOBILE OPTIMIZED */}
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-800 p-3 sm:p-4 z-40">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+      {/* Fixed bottom navigation - COMPACT */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-800 p-2 sm:p-3 z-40">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
           <button
             onClick={handleBack}
             disabled={processingStatus.isProcessing}
-            className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors touch-manipulation disabled:opacity-50"
+            className="flex items-center gap-1 px-3 sm:px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors touch-manipulation disabled:opacity-50"
           >
-            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">Back</span>
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline text-sm">Back</span>
           </button>
 
           <button
             onClick={handleContinue}
             disabled={documents.length === 0 || processingStatus.isProcessing}
             className={`
-              flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold transition-all touch-manipulation
+              flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 sm:px-6 py-2 rounded-lg font-semibold transition-all touch-manipulation text-sm
               ${documents.length > 0 && !processingStatus.isProcessing
                 ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg active:scale-[0.98]"
                 : "bg-slate-800 text-slate-500 cursor-not-allowed"
@@ -1277,13 +1277,13 @@ export default function DocumentUploadPage() {
           >
             {processingStatus.isProcessing ? (
               <>
-                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                <span className="text-sm sm:text-base">Processing...</span>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Processing...</span>
               </>
             ) : (
               <>
-                <span className="text-sm sm:text-base">Continue</span>
-                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>

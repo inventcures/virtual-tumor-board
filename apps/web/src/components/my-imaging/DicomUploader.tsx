@@ -391,7 +391,7 @@ export function DicomUploader({ onUpload, onCancel }: DicomUploaderProps) {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".dcm,.dicom,.nii,.nii.gz,image/*"
+          accept="*/*"
           onChange={handleFileSelect}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
