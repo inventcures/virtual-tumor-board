@@ -13,7 +13,7 @@ import {
   ZoomIn, ZoomOut, RotateCcw, Maximize2, Grid2X2,
   Sun, Contrast, Crosshair, Ruler, Circle, Square,
   Download, Share2, Settings, Info, FileText, Target,
-  Loader2
+  Loader2, Upload, FolderOpen, X
 } from "lucide-react";
 import { generateCaseVolume, CaseVolume, getSliceDimensions } from "@/lib/imaging/case-volume-generator";
 import { getCaseImagingConfig, getDefaultImagingConfig, CaseImagingConfig, VolumeType } from "@/lib/imaging/case-imaging-config";
@@ -154,8 +154,15 @@ export function ModernDicomViewer({
   const [dicomSeries, setDicomSeries] = useState<DicomSeries | null>(null);
   const [imageSource, setImageSource] = useState<'dicom' | 'png' | 'procedural'>('procedural');
   
+  // User-uploaded DICOM
+  const [showUploadPanel, setShowUploadPanel] = useState(false);
+  const [uploadedDicomFiles, setUploadedDicomFiles] = useState<File[]>([]);
+  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Study info based on case
   const studyInfo: StudyInfo = useMemo(() => ({
@@ -353,6 +360,190 @@ export function ModernDicomViewer({
     setWindowWidth(preset.width);
   };
 
+  // Handle DICOM file upload from user's CD/folder
+  const handleDicomUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    
+    setIsProcessingUpload(true);
+    setUploadError(null);
+    setLoadingProgress({ loaded: 0, total: files.length });
+    
+    try {
+      // Filter for DICOM files (no extension or .dcm)
+      const dicomFiles: File[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        // DICOM files often have no extension or .dcm
+        if (!file.name.includes('.') || 
+            file.name.toLowerCase().endsWith('.dcm') ||
+            file.name.toLowerCase().endsWith('.dicom')) {
+          dicomFiles.push(file);
+        }
+      }
+      
+      if (dicomFiles.length === 0) {
+        setUploadError('No DICOM files found. DICOM files typically have .dcm extension or no extension.');
+        setIsProcessingUpload(false);
+        return;
+      }
+      
+      setUploadedDicomFiles(dicomFiles);
+      
+      // Parse DICOM files using dicom-parser
+      const dicomParser = await import('dicom-parser');
+      
+      interface ParsedSlice {
+        instanceNumber: number;
+        pixelData: Int16Array | Uint16Array;
+        rows: number;
+        columns: number;
+        windowCenter: number;
+        windowWidth: number;
+        rescaleIntercept: number;
+        rescaleSlope: number;
+      }
+      
+      const parsedSlices: ParsedSlice[] = [];
+      let defaultWC = 40, defaultWW = 400; // CT defaults
+      
+      for (let i = 0; i < dicomFiles.length; i++) {
+        const file = dicomFiles[i];
+        setLoadingProgress({ loaded: i + 1, total: dicomFiles.length });
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const byteArray = new Uint8Array(arrayBuffer);
+          const dataSet = dicomParser.parseDicom(byteArray);
+          
+          // Get image dimensions
+          const rows = dataSet.uint16('x00280010') || 512;
+          const columns = dataSet.uint16('x00280011') || 512;
+          const instanceNumber = dataSet.intString('x00200013') || i;
+          
+          // Get windowing
+          const wc = dataSet.floatString('x00281050');
+          const ww = dataSet.floatString('x00281051');
+          if (wc !== undefined) defaultWC = wc;
+          if (ww !== undefined) defaultWW = ww;
+          
+          // Get rescale values
+          const rescaleIntercept = dataSet.floatString('x00281052') || 0;
+          const rescaleSlope = dataSet.floatString('x00281053') || 1;
+          
+          // Get pixel data
+          const pixelDataElement = dataSet.elements.x7fe00010;
+          if (pixelDataElement) {
+            const bitsAllocated = dataSet.uint16('x00280100') || 16;
+            let pixelData: Int16Array | Uint16Array;
+            
+            if (bitsAllocated === 16) {
+              // Check if signed
+              const pixelRepresentation = dataSet.uint16('x00280103') || 0;
+              if (pixelRepresentation === 1) {
+                pixelData = new Int16Array(arrayBuffer, pixelDataElement.dataOffset, rows * columns);
+              } else {
+                pixelData = new Uint16Array(arrayBuffer, pixelDataElement.dataOffset, rows * columns);
+              }
+            } else {
+              // 8-bit data - convert to 16-bit
+              const uint8Data = new Uint8Array(arrayBuffer, pixelDataElement.dataOffset, rows * columns);
+              pixelData = new Int16Array(uint8Data);
+            }
+            
+            parsedSlices.push({
+              instanceNumber,
+              pixelData,
+              rows,
+              columns,
+              windowCenter: wc || defaultWC,
+              windowWidth: ww || defaultWW,
+              rescaleIntercept,
+              rescaleSlope,
+            });
+          }
+        } catch (err) {
+          console.warn(`Failed to parse DICOM file ${file.name}:`, err);
+        }
+      }
+      
+      if (parsedSlices.length === 0) {
+        setUploadError('Could not parse any DICOM files. Files may be corrupted or in an unsupported format.');
+        setIsProcessingUpload(false);
+        return;
+      }
+      
+      // Sort by instance number
+      parsedSlices.sort((a, b) => a.instanceNumber - b.instanceNumber);
+      
+      // Create DicomSeries-like object
+      const uploadedSeries: DicomSeries = {
+        folder: 'user-upload',
+        loaded: true,
+        slices: parsedSlices.map(s => ({
+          instanceNumber: s.instanceNumber,
+          pixelData: s.pixelData,
+          metadata: {
+            rows: s.rows,
+            columns: s.columns,
+            rescaleIntercept: s.rescaleIntercept,
+            rescaleSlope: s.rescaleSlope,
+            bitsAllocated: 16,
+            bitsStored: 16,
+            highBit: 15,
+            pixelRepresentation: 1,
+            windowCenter: s.windowCenter,
+            windowWidth: s.windowWidth,
+          },
+        })),
+        defaultWindowCenter: defaultWC,
+        defaultWindowWidth: defaultWW,
+        minValue: -1024,
+        maxValue: 3071,
+      };
+      
+      // Set the uploaded series as active
+      setDicomSeries(uploadedSeries);
+      setImageSource('dicom');
+      setMaxSlice(parsedSlices.length - 1);
+      setCurrentSlice(Math.floor(parsedSlices.length / 2));
+      setWindowCenter(defaultWC);
+      setWindowWidth(defaultWW);
+      
+      // Update series info
+      const uploadedSeriesInfo: SeriesInfo = {
+        id: 'user-upload',
+        name: 'User Uploaded DICOM',
+        description: `${parsedSlices.length} slices from CD/folder`,
+        sliceCount: parsedSlices.length,
+        bodyRegion: 'chest', // Default
+        modality: 'CT',
+      };
+      setCaseSeries([uploadedSeriesInfo]);
+      setSelectedSeries(uploadedSeriesInfo);
+      
+      setShowUploadPanel(false);
+      console.log(`[Viewer] Successfully loaded ${parsedSlices.length} user-uploaded DICOM slices`);
+      
+    } catch (err) {
+      console.error('DICOM upload error:', err);
+      setUploadError('Failed to process DICOM files. Please try again.');
+    } finally {
+      setIsProcessingUpload(false);
+    }
+  }, []);
+
+  // Clear user upload and return to demo
+  const clearUserUpload = useCallback(() => {
+    setUploadedDicomFiles([]);
+    setDicomSeries(null);
+    setImageSource('procedural');
+    // Trigger reload of demo case
+    const config = getCaseImagingConfig(caseId) || getDefaultImagingConfig();
+    const series = generateSeriesForConfig(config);
+    setCaseSeries(series);
+    setSelectedSeries(series[0]);
+  }, [caseId]);
+
   if (isLoading) {
     return (
       <div className="h-[calc(100vh-280px)] min-h-[600px] flex items-center justify-center bg-[#0a0f1a] rounded-xl">
@@ -390,7 +581,17 @@ export function ModernDicomViewer({
       <div className="w-56 flex-shrink-0 bg-[#0d1320] border-r border-slate-800 flex flex-col">
         {/* Sidebar Header */}
         <div className="p-3 border-b border-slate-800">
-          <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Body Regions</div>
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Body Regions</div>
+            <button
+              onClick={() => setShowUploadPanel(true)}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-600/20 text-emerald-400 rounded hover:bg-emerald-600/30 transition-colors"
+              title="Upload DICOM files from CD"
+            >
+              <Upload className="w-3 h-3" />
+              Upload
+            </button>
+          </div>
         </div>
         
         {/* Series List */}
@@ -776,6 +977,126 @@ export function ModernDicomViewer({
           </div>
         </div>
       </div>
+
+      {/* Hidden file input for DICOM upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".dcm,.dicom,*"
+        multiple
+        // @ts-expect-error - webkitdirectory is non-standard but supported
+        webkitdirectory=""
+        className="hidden"
+        onChange={(e) => handleDicomUpload(e.target.files)}
+      />
+
+      {/* Upload Panel Modal */}
+      {showUploadPanel && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#0d1320] border border-slate-700 rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-600/20 flex items-center justify-center">
+                  <FolderOpen className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Upload DICOM Images</h3>
+                  <p className="text-xs text-slate-400">From CD, USB, or local folder</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUploadPanel(false)}
+                className="p-2 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Instructions */}
+            <div className="mb-6 p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+              <h4 className="text-sm font-medium text-white mb-2">How to upload:</h4>
+              <ol className="text-xs text-slate-400 space-y-1.5 list-decimal list-inside">
+                <li>Insert your CD/DVD or connect USB drive</li>
+                <li>Click "Select DICOM Folder" below</li>
+                <li>Navigate to the DICOM folder (often named "DICOM" or contains .dcm files)</li>
+                <li>Select the folder and click "Upload"</li>
+              </ol>
+              <div className="mt-3 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                <p className="text-xs text-amber-300">
+                  <strong>Privacy:</strong> Files are processed locally in your browser. 
+                  No data is uploaded to any server.
+                </p>
+              </div>
+            </div>
+
+            {/* Error message */}
+            {uploadError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                <p className="text-sm text-red-400">{uploadError}</p>
+              </div>
+            )}
+
+            {/* Processing indicator */}
+            {isProcessingUpload && (
+              <div className="mb-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                  <div>
+                    <p className="text-sm text-blue-400">Processing DICOM files...</p>
+                    {loadingProgress.total > 0 && (
+                      <p className="text-xs text-blue-300/70 mt-1">
+                        {loadingProgress.loaded} / {loadingProgress.total} files
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {loadingProgress.total > 0 && (
+                  <div className="mt-3 w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${(loadingProgress.loaded / loadingProgress.total) * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Upload buttons */}
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessingUpload}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FolderOpen className="w-5 h-5" />
+                Select DICOM Folder
+              </button>
+              
+              <p className="text-center text-xs text-slate-500">
+                Supports standard DICOM files (.dcm) from CT, MRI, and PET scans
+              </p>
+            </div>
+
+            {/* Show uploaded file count if any */}
+            {uploadedDicomFiles.length > 0 && !isProcessingUpload && (
+              <div className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-emerald-400">
+                    Loaded {uploadedDicomFiles.length} DICOM files
+                  </p>
+                  <button
+                    onClick={clearUserUpload}
+                    className="text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    Clear & return to demo
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

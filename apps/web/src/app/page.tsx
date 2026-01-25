@@ -17,8 +17,7 @@ import {
   Heart,
   Dna,
   AlertTriangle,
-  ChevronRight,
-  Github
+  ChevronRight
 } from "lucide-react";
 
 // Specialist agents
@@ -50,19 +49,10 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <a 
-                href="https://github.com/inventcures/virtual-tumor-board"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 text-slate-400 hover:text-white transition-colors"
-                aria-label="GitHub"
-              >
-                <Github className="w-5 h-5" />
-              </a>
-              <a 
                 href="https://inventcures.github.io"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors hidden sm:block"
+                className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors"
               >
                 inventcures
               </a>
@@ -243,15 +233,21 @@ export default function LandingPage() {
                 Origin Story
               </h2>
               <p className="text-slate-400 leading-relaxed mb-4">
-                This project started as an exploration of multi-agent AI systems in healthcare. 
-                Having witnessed tumor board discussions in Indian hospitals, I wanted to see if 
-                AI agents could simulate the nuanced deliberation between specialists—while being 
-                grounded in evidence-based guidelines.
+                In mid-2025, my aunt was diagnosed with breast cancer in India. Navigating her care 
+                meant gathering opinions from multiple specialists—surgical oncologist, medical oncologist, 
+                radiation oncologist, pathologist—each with different perspectives. Getting them all in 
+                one room for a tumor board discussion? Nearly impossible in a resource-constrained setting.
               </p>
               <p className="text-slate-400 leading-relaxed mb-4">
-                The goal isn't to replace tumor boards, but to explore how AI might democratize 
-                access to multi-disciplinary oncology expertise, especially in resource-limited settings 
-                where patients may not have access to a full MDT.
+                That experience sparked a question: <em className="text-white">What if AI could simulate 
+                a multi-disciplinary tumor board?</em> Not to replace real doctors, but to help patients 
+                and families understand what questions to ask, what the options might be, and what 
+                specialists typically consider when deliberating on a case.
+              </p>
+              <p className="text-slate-400 leading-relaxed mb-4">
+                This tool is the result—7 AI specialist agents, grounded in international guidelines, 
+                simulating the nuanced deliberation of a tumor board. It's built for education, research, 
+                and to explore how AI might democratize access to multi-disciplinary oncology thinking.
               </p>
               <a 
                 href="https://inventcures.github.io"
@@ -327,15 +323,6 @@ export default function LandingPage() {
             </div>
             
             <div className="flex items-center gap-6 text-sm text-slate-500">
-              <a 
-                href="https://github.com/inventcures/virtual-tumor-board"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-white transition-colors flex items-center gap-1"
-              >
-                <Github className="w-4 h-4" />
-                GitHub
-              </a>
               <a 
                 href="https://inventcures.github.io"
                 target="_blank"
