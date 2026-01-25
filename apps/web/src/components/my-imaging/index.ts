@@ -4,3 +4,4 @@ export { DicomUploader } from './DicomUploader';
 export { CameraCapture } from './CameraCapture';
 export { GalleryUpload } from './GalleryUpload';
 export { MedGemmaPanel } from './MedGemmaPanel';
+export { ReconciliationPanel } from './ReconciliationPanel';
