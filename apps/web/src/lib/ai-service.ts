@@ -119,9 +119,9 @@ async function callGemini(
   }));
 
   // Gemini uses system instruction separately
-  // Using gemini-2.5-pro - latest stable pro model (paid plan)
+  // Using gemini-2.5-flash - fast and capable (paid plan)
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -156,7 +156,7 @@ async function callGemini(
   return {
     content: text,
     provider: 'gemini',
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     tokensUsed: data.usageMetadata?.totalTokenCount,
   };
 }
