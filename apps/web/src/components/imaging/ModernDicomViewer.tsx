@@ -3,6 +3,8 @@
 /**
  * Modern DICOM Viewer - Inspired by Tobi Lutke's MRI viewer
  * Clean, professional medical imaging interface
+ * 
+ * Now with REAL DICOM file support using dicom-parser!
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -10,13 +12,23 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   ZoomIn, ZoomOut, RotateCcw, Maximize2, Grid2X2,
   Sun, Contrast, Crosshair, Ruler, Circle, Square,
-  Download, Share2, Settings, Info, FileText, Target
+  Download, Share2, Settings, Info, FileText, Target,
+  Loader2
 } from "lucide-react";
 import { generateCaseVolume, CaseVolume, getSliceDimensions } from "@/lib/imaging/case-volume-generator";
 import { getCaseImagingConfig, getDefaultImagingConfig, CaseImagingConfig, VolumeType } from "@/lib/imaging/case-imaging-config";
 import { WINDOWING_PRESETS, WindowingPreset } from "@/lib/imaging/windowing-presets";
 import { getRadiologyReport, generatePlaceholderReport } from "@/lib/imaging/radiology-reports";
+// Legacy PNG loader (fallback)
 import { loadImageSeries, getSliceImageData, hasRealImages, RealImageSeries } from "@/lib/imaging/real-image-loader";
+// NEW: Real DICOM loader
+import { 
+  loadDicomSeries, 
+  renderDicomSlice, 
+  hasDicomFiles, 
+  DicomSeries,
+  CASE_DICOM_MAPPING
+} from "@/lib/imaging/dicom-loader";
 
 // Types
 type ViewAxis = "axial" | "sagittal" | "coronal";
@@ -119,6 +131,7 @@ export function ModernDicomViewer({
   const [volume, setVolume] = useState<CaseVolume | null>(null);
   const [showTumorOverlay, setShowTumorOverlay] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState({ loaded: 0, total: 0 });
   const [currentSlice, setCurrentSlice] = useState(50);
   const [maxSlice, setMaxSlice] = useState(99);
   const [currentAxis, setCurrentAxis] = useState<ViewAxis>("axial");
@@ -134,9 +147,12 @@ export function ModernDicomViewer({
   const [showReport, setShowReport] = useState(true);
   const [activeTool, setActiveTool] = useState<string>("crosshair");
   
-  // Real image support
+  // Real image support (legacy PNG)
   const [realImageSeries, setRealImageSeries] = useState<RealImageSeries | null>(null);
-  const [useRealImages, setUseRealImages] = useState(true); // Prefer real images when available
+  
+  // NEW: Real DICOM support
+  const [dicomSeries, setDicomSeries] = useState<DicomSeries | null>(null);
+  const [imageSource, setImageSource] = useState<'dicom' | 'png' | 'procedural'>('procedural');
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -159,10 +175,12 @@ export function ModernDicomViewer({
     [caseId, cancerType]
   );
 
-  // Generate case-specific volume with tumor masks OR load real images
+  // Load images: Priority order: 1) Real DICOM, 2) PNG images, 3) Procedural
   useEffect(() => {
     setIsLoading(true);
     setRealImageSeries(null);
+    setDicomSeries(null);
+    setLoadingProgress({ loaded: 0, total: 0 });
     
     // Get case config first
     const config = getCaseImagingConfig(caseId) || getDefaultImagingConfig();
@@ -177,46 +195,79 @@ export function ModernDicomViewer({
     const region = VOLUME_TYPE_TO_REGION[config.volumeType];
     setExpandedRegions([region]);
     
-    // Try to load real images first if available and preferred
     const loadImages = async () => {
-      if (useRealImages && hasRealImages(caseId)) {
-        console.log(`[Viewer] Attempting to load real images for case: ${caseId}`);
+      // PRIORITY 1: Try to load REAL DICOM files
+      if (hasDicomFiles(caseId)) {
+        console.log(`[Viewer] Loading REAL DICOM files for case: ${caseId}`);
+        try {
+          const dicom = await loadDicomSeries(caseId, (loaded, total) => {
+            setLoadingProgress({ loaded, total });
+          });
+          
+          if (dicom && dicom.loaded && dicom.slices.length > 0) {
+            console.log(`[Viewer] Loaded ${dicom.slices.length} DICOM slices`);
+            setDicomSeries(dicom);
+            setImageSource('dicom');
+            setMaxSlice(dicom.slices.length - 1);
+            setCurrentSlice(Math.floor(dicom.slices.length / 2));
+            setWindowCenter(dicom.defaultWindowCenter);
+            setWindowWidth(dicom.defaultWindowWidth);
+            
+            // Update series info with actual slice count
+            const updatedSeries = series.map(s => ({
+              ...s,
+              sliceCount: dicom.slices.length,
+            }));
+            setCaseSeries(updatedSeries);
+            setSelectedSeries(updatedSeries[0]);
+            
+            setIsLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.error(`[Viewer] Failed to load DICOM:`, err);
+        }
+      }
+      
+      // PRIORITY 2: Try PNG images (legacy)
+      if (hasRealImages(caseId)) {
+        console.log(`[Viewer] Trying PNG images for case: ${caseId}`);
         try {
           const realSeries = await loadImageSeries(caseId);
           if (realSeries && realSeries.loaded && realSeries.images.length > 0) {
-            console.log(`[Viewer] Loaded ${realSeries.images.length} real images`);
+            console.log(`[Viewer] Loaded ${realSeries.images.length} PNG images`);
             setRealImageSeries(realSeries);
+            setImageSource('png');
             setMaxSlice(realSeries.images.length - 1);
             setCurrentSlice(Math.floor(realSeries.images.length / 2));
-            // Use windowing from manifest if available
             if (realSeries.manifest.window) {
               setWindowCenter(realSeries.manifest.window.center);
               setWindowWidth(realSeries.manifest.window.width);
             }
             setIsLoading(false);
-            return; // Successfully loaded real images
+            return;
           }
         } catch (err) {
-          console.log(`[Viewer] Failed to load real images, falling back to procedural:`, err);
+          console.log(`[Viewer] Failed to load PNG images:`, err);
         }
       }
       
-      // Fallback to procedural generation
+      // PRIORITY 3: Fallback to procedural generation
       console.log(`[Viewer] Using procedural generation for case: ${caseId}`);
       const caseVolume = generateCaseVolume(caseId, 256, 256, 100);
       setVolume(caseVolume);
+      setImageSource('procedural');
       setMaxSlice(caseVolume.metadata.shape[0] - 1);
       setCurrentSlice(Math.floor(caseVolume.metadata.shape[0] / 2));
-      // Set default windowing based on modality
       setWindowCenter(caseVolume.defaultWindow.center);
       setWindowWidth(caseVolume.defaultWindow.width);
       setIsLoading(false);
     };
     
     loadImages();
-  }, [caseId, useRealImages]);
+  }, [caseId]);
 
-  // Render slice to canvas (supports both real images and procedural volumes)
+  // Render slice to canvas (supports DICOM, PNG images, and procedural volumes)
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -224,7 +275,23 @@ export function ModernDicomViewer({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Try real images first
+    // PRIORITY 1: Render DICOM slice
+    if (dicomSeries && dicomSeries.loaded && dicomSeries.slices[currentSlice]) {
+      const slice = dicomSeries.slices[currentSlice];
+      const imageData = renderDicomSlice(
+        slice,
+        windowCenter,
+        windowWidth,
+        brightness,
+        contrast
+      );
+      canvas.width = imageData.width;
+      canvas.height = imageData.height;
+      ctx.putImageData(imageData, 0, 0);
+      return;
+    }
+
+    // PRIORITY 2: Render PNG images
     if (realImageSeries && realImageSeries.loaded) {
       const imageData = getSliceImageData(
         realImageSeries, 
@@ -242,14 +309,14 @@ export function ModernDicomViewer({
       }
     }
     
-    // Fallback to procedural volume
+    // PRIORITY 3: Render procedural volume
     if (volume) {
       const imageData = volume.getSliceAsImageData(currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay);
       canvas.width = imageData.width;
       canvas.height = imageData.height;
       ctx.putImageData(imageData, 0, 0);
     }
-  }, [volume, realImageSeries, currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay, brightness, contrast]);
+  }, [volume, realImageSeries, dicomSeries, currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay, brightness, contrast]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -289,9 +356,29 @@ export function ModernDicomViewer({
   if (isLoading) {
     return (
       <div className="h-[calc(100vh-280px)] min-h-[600px] flex items-center justify-center bg-[#0a0f1a] rounded-xl">
-        <div className="flex flex-col items-center gap-3 text-slate-400">
-          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm">Loading imaging study...</span>
+        <div className="flex flex-col items-center gap-4 text-slate-400">
+          <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+          <div className="text-center">
+            <div className="text-sm font-medium">Loading DICOM Study...</div>
+            {loadingProgress.total > 0 && (
+              <div className="text-xs text-slate-500 mt-1">
+                {loadingProgress.loaded} / {loadingProgress.total} slices
+              </div>
+            )}
+            {hasDicomFiles(caseId) && (
+              <div className="text-xs text-emerald-400 mt-2">
+                Real TCIA Cancer Images
+              </div>
+            )}
+          </div>
+          {loadingProgress.total > 0 && (
+            <div className="w-48 h-1 bg-slate-700 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${(loadingProgress.loaded / loadingProgress.total) * 100}%` }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -422,11 +509,20 @@ export function ModernDicomViewer({
           {/* Right - View Options */}
           <div className="flex items-center gap-2">
             {/* Image Source Indicator */}
-            <div className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800/50 text-xs">
-              <span className={`w-2 h-2 rounded-full ${realImageSeries?.loaded ? 'bg-green-500' : 'bg-yellow-500'}`} />
-              <span className="text-slate-400">
-                {realImageSeries?.loaded ? 'Real Images' : 'Procedural'}
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${
+              imageSource === 'dicom' ? 'bg-emerald-600/20 border border-emerald-600/30' : 'bg-slate-800/50'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                imageSource === 'dicom' ? 'bg-emerald-500 animate-pulse' : 
+                imageSource === 'png' ? 'bg-green-500' : 'bg-yellow-500'
+              }`} />
+              <span className={`${imageSource === 'dicom' ? 'text-emerald-400 font-medium' : 'text-slate-400'}`}>
+                {imageSource === 'dicom' ? 'REAL DICOM' : 
+                 imageSource === 'png' ? 'PNG Images' : 'Procedural'}
               </span>
+              {imageSource === 'dicom' && dicomSeries && (
+                <span className="text-emerald-500/70 text-[10px]">TCIA</span>
+              )}
             </div>
             <button 
               onClick={() => setShowTumorOverlay(!showTumorOverlay)}
