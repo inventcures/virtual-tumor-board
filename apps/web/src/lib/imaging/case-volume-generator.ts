@@ -104,6 +104,189 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+// Multi-octave noise for more natural patterns
+function fbmNoise(x: number, y: number, z: number, octaves: number = 4): number {
+  let value = 0;
+  let amplitude = 1;
+  let frequency = 1;
+  let maxValue = 0;
+  
+  for (let i = 0; i < octaves; i++) {
+    value += smoothNoise(x * frequency, y * frequency, z * frequency) * amplitude;
+    maxValue += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+  
+  return value / maxValue;
+}
+
+// Spherical harmonics-like deformation for organic tumor shapes
+function sphericalDeformation(theta: number, phi: number, seed: number): number {
+  // Create irregular lobulated shape using multiple frequency components
+  const rand = seededRandom(seed);
+  let deformation = 1;
+  
+  // Add several lobes at different positions
+  const numLobes = 3 + Math.floor(rand() * 4); // 3-6 lobes
+  for (let i = 0; i < numLobes; i++) {
+    const lobeTheta = rand() * Math.PI * 2;
+    const lobePhi = rand() * Math.PI;
+    const lobeSize = 0.15 + rand() * 0.25;
+    const lobeAmp = 0.2 + rand() * 0.3;
+    
+    // Angular distance to lobe center
+    const cosDist = Math.sin(phi) * Math.sin(lobePhi) * Math.cos(theta - lobeTheta) + 
+                    Math.cos(phi) * Math.cos(lobePhi);
+    const dist = Math.acos(Math.max(-1, Math.min(1, cosDist)));
+    
+    // Gaussian-like lobe contribution
+    deformation += lobeAmp * Math.exp(-dist * dist / (2 * lobeSize * lobeSize));
+  }
+  
+  // Add high-frequency surface irregularity
+  deformation += 0.1 * Math.sin(theta * 5 + seed) * Math.sin(phi * 4);
+  deformation += 0.05 * Math.sin(theta * 11 + seed * 2) * Math.sin(phi * 9);
+  
+  return deformation;
+}
+
+// Irregular tumor SDF with lobulation and surface roughness
+function irregularTumorSDF(
+  x: number, y: number, z: number,
+  cx: number, cy: number, cz: number,
+  rx: number, ry: number, rz: number,
+  seed: number,
+  irregularity: number = 0.5, // 0 = smooth ellipsoid, 1 = very irregular
+  lobulation: number = 0.5    // 0 = no lobes, 1 = highly lobulated
+): number {
+  // Normalize to unit sphere space
+  const dx = (x - cx) / rx;
+  const dy = (y - cy) / ry;
+  const dz = (z - cz) / rz;
+  
+  const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (r < 0.001) return -1; // At center
+  
+  // Convert to spherical coordinates
+  const theta = Math.atan2(dy, dx);
+  const phi = Math.acos(Math.max(-1, Math.min(1, dz / r)));
+  
+  // Get deformation factor based on angle
+  const deform = sphericalDeformation(theta, phi, seed);
+  
+  // Add noise-based surface roughness
+  const noiseScale = 0.15 * (rx + ry + rz) / 3;
+  const surfaceNoise = fbmNoise(
+    x / noiseScale + seed,
+    y / noiseScale + seed * 2,
+    z / noiseScale + seed * 3,
+    3
+  );
+  
+  // Combine base shape with deformations
+  const effectiveRadius = 1 * (1 + lobulation * (deform - 1)) * (1 + irregularity * surfaceNoise * 0.3);
+  
+  return r - effectiveRadius;
+}
+
+// Generate spiculations (finger-like projections) for certain tumor types
+function addSpiculations(
+  x: number, y: number, z: number,
+  cx: number, cy: number, cz: number,
+  rx: number, ry: number, rz: number,
+  seed: number,
+  baseDist: number
+): number {
+  if (baseDist > 0.5 || baseDist < -0.8) return baseDist; // Only near surface
+  
+  const rand = seededRandom(seed + 1000);
+  const numSpicules = 8 + Math.floor(rand() * 8);
+  
+  let minDist = baseDist;
+  
+  for (let i = 0; i < numSpicules; i++) {
+    // Random direction for spicule
+    const spicTheta = rand() * Math.PI * 2;
+    const spicPhi = rand() * Math.PI;
+    
+    const dirX = Math.sin(spicPhi) * Math.cos(spicTheta);
+    const dirY = Math.sin(spicPhi) * Math.sin(spicTheta);
+    const dirZ = Math.cos(spicPhi);
+    
+    // Spicule start point (on surface)
+    const startX = cx + dirX * rx;
+    const startY = cy + dirY * ry;
+    const startZ = cz + dirZ * rz;
+    
+    // Spicule length and width
+    const length = (0.3 + rand() * 0.5) * Math.min(rx, ry, rz);
+    const width = 0.05 + rand() * 0.08;
+    
+    // End point
+    const endX = startX + dirX * length;
+    const endY = startY + dirY * length;
+    const endZ = startZ + dirZ * length;
+    
+    // Distance to line segment (spicule)
+    const t = Math.max(0, Math.min(1,
+      ((x - startX) * (endX - startX) + (y - startY) * (endY - startY) + (z - startZ) * (endZ - startZ)) /
+      (length * length + 0.001)
+    ));
+    
+    const projX = startX + t * (endX - startX);
+    const projY = startY + t * (endY - startY);
+    const projZ = startZ + t * (endZ - startZ);
+    
+    const distToSpic = Math.sqrt(
+      (x - projX) * (x - projX) + 
+      (y - projY) * (y - projY) + 
+      (z - projZ) * (z - projZ)
+    );
+    
+    // Tapered spicule (thinner at tip)
+    const taperWidth = width * (1 - t * 0.7);
+    const spicDist = distToSpic / Math.max(rx, ry, rz) - taperWidth;
+    
+    minDist = Math.min(minDist, spicDist);
+  }
+  
+  return minDist;
+}
+
+// Create irregular necrotic core
+function necroticCoreSDF(
+  x: number, y: number, z: number,
+  cx: number, cy: number, cz: number,
+  rx: number, ry: number, rz: number,
+  necrosisRatio: number,
+  seed: number
+): number {
+  // Necrosis is typically 30-70% of tumor volume, offset from center
+  const rand = seededRandom(seed + 2000);
+  
+  // Offset necrotic center
+  const offsetX = (rand() - 0.5) * rx * 0.3;
+  const offsetY = (rand() - 0.5) * ry * 0.3;
+  const offsetZ = (rand() - 0.5) * rz * 0.3;
+  
+  const ncx = cx + offsetX;
+  const ncy = cy + offsetY;
+  const ncz = cz + offsetZ;
+  
+  // Irregular necrotic region
+  return irregularTumorSDF(
+    x, y, z,
+    ncx, ncy, ncz,
+    rx * necrosisRatio * 0.7,
+    ry * necrosisRatio * 0.8,
+    rz * necrosisRatio * 0.75,
+    seed + 3000,
+    0.6, // More irregular
+    0.4
+  );
+}
+
 /**
  * Generate CT Thorax volume
  */
@@ -433,7 +616,7 @@ function generateHeadNeckCT(width: number, height: number, depth: number, config
 }
 
 /**
- * Add tumors to CT volume with mask
+ * Add tumors to CT volume with mask - using realistic irregular shapes
  */
 function addTumorsToVolume(
   data: Float32Array, mask: Uint8Array, 
@@ -443,7 +626,13 @@ function addTumorsToVolume(
 ) {
   const allTumors = [...config.tumors, ...(config.metastases || [])];
   
-  for (const tumor of allTumors) {
+  // Generate unique seed for each case for reproducibility
+  const caseSeed = config.caseId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  for (let tumorIdx = 0; tumorIdx < allTumors.length; tumorIdx++) {
+    const tumor = allTumors[tumorIdx];
+    const tumorSeed = caseSeed + tumorIdx * 1000;
+    
     const tcx = tumor.location.x * width;
     const tcy = tumor.location.y * height;
     const tcz = tumor.location.z * depth;
@@ -451,39 +640,74 @@ function addTumorsToVolume(
     const try_ = tumor.size.ry * height;
     const trz = tumor.size.rz * depth;
     
-    for (let z = Math.floor(tcz - trz - 5); z <= Math.ceil(tcz + trz + 5); z++) {
-      for (let y = Math.floor(tcy - try_ - 5); y <= Math.ceil(tcy + try_ + 5); y++) {
-        for (let x = Math.floor(tcx - trx - 5); x <= Math.ceil(tcx + trx + 5); x++) {
+    // Determine irregularity based on tumor type
+    const irregularity = tumor.infiltrative ? 0.7 : (tumor.heterogeneity || 0.5);
+    const lobulation = tumor.infiltrative ? 0.6 : 0.45;
+    
+    // Expand search region for irregular shapes
+    const margin = Math.max(trx, try_, trz) * 0.5;
+    
+    for (let z = Math.floor(tcz - trz - margin); z <= Math.ceil(tcz + trz + margin); z++) {
+      for (let y = Math.floor(tcy - try_ - margin); y <= Math.ceil(tcy + try_ + margin); y++) {
+        for (let x = Math.floor(tcx - trx - margin); x <= Math.ceil(tcx + trx + margin); x++) {
           if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth) continue;
           
           const idx = z * height * width + y * width + x;
-          const dist = ellipsoidSDF(x, y, z, tcx, tcy, tcz, trx, try_, trz);
+          
+          // Use irregular tumor SDF
+          let dist = irregularTumorSDF(
+            x, y, z,
+            tcx, tcy, tcz,
+            trx, try_, trz,
+            tumorSeed,
+            irregularity,
+            lobulation
+          );
+          
+          // Add spiculations for spiculated tumors (like lung adenocarcinoma)
+          if (tumor.spiculated) {
+            dist = addSpiculations(x, y, z, tcx, tcy, tcz, trx, try_, trz, tumorSeed, dist);
+          }
           
           if (dist < 0) {
             mask[idx] = 1; // Mark as tumor
             
-            // Tumor with optional necrosis
-            const necrosisDist = dist / (tumor.necrosis || 0.01);
-            if (necrosisDist > -0.5 && tumor.necrosis) {
-              data[idx] = necrosisIntensity + smoothNoise(x * 0.3, y * 0.3, z * 0.3) * 15;
-            } else {
-              let intensity = tumor.intensity || tumorIntensity;
-              intensity += smoothNoise(x * 0.25, y * 0.25, z * 0.25) * 20 * (tumor.heterogeneity || 0.5);
+            // Check for necrotic core
+            if (tumor.necrosis && tumor.necrosis > 0) {
+              const necDist = necroticCoreSDF(
+                x, y, z,
+                tcx, tcy, tcz,
+                trx, try_, trz,
+                tumor.necrosis,
+                tumorSeed
+              );
               
-              // Rim enhancement
-              if (tumor.enhancement && dist > -3) {
-                intensity += 30 * tumor.enhancement;
+              if (necDist < 0) {
+                // Inside necrotic region - lower intensity, more heterogeneous
+                data[idx] = necrosisIntensity + fbmNoise(x * 0.2, y * 0.2, z * 0.2, 3) * 25;
+                continue;
               }
-              
-              data[idx] = intensity;
             }
             
-            // Spiculated edges
-            if (tumor.spiculated && dist > -2) {
-              if (smoothNoise(x * 0.4, y * 0.4, z * 0.4) > 0.3) {
-                mask[idx] = 0;
-              }
+            // Solid tumor with heterogeneity
+            let intensity = tumor.intensity || tumorIntensity;
+            
+            // Add internal heterogeneity with noise
+            const hetNoise = fbmNoise(
+              x * 0.15 + tumorSeed,
+              y * 0.15 + tumorSeed * 2,
+              z * 0.15 + tumorSeed * 3,
+              4
+            );
+            intensity += hetNoise * 25 * (tumor.heterogeneity || 0.5);
+            
+            // Rim enhancement (more intense at edges)
+            if (tumor.enhancement && dist > -3) {
+              const enhancementFactor = smoothstep(-3, 0, dist);
+              intensity += 35 * tumor.enhancement * enhancementFactor;
             }
+            
+            data[idx] = intensity;
           }
         }
       }
@@ -492,14 +716,19 @@ function addTumorsToVolume(
 }
 
 /**
- * Add brain tumors with edema
+ * Add brain tumors with edema - using realistic irregular GBM morphology
  */
 function addBrainTumorsToVolume(
   data: Float32Array, mask: Uint8Array,
   width: number, height: number, depth: number,
   config: CaseImagingConfig
 ) {
-  for (const tumor of config.tumors) {
+  const caseSeed = config.caseId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  for (let tumorIdx = 0; tumorIdx < config.tumors.length; tumorIdx++) {
+    const tumor = config.tumors[tumorIdx];
+    const tumorSeed = caseSeed + tumorIdx * 1000;
+    
     const tcx = tumor.location.x * width;
     const tcy = tumor.location.y * height;
     const tcz = tumor.location.z * depth;
@@ -507,35 +736,79 @@ function addBrainTumorsToVolume(
     const try_ = tumor.size.ry * height;
     const trz = tumor.size.rz * depth;
     
-    // Edema extends 1.5x tumor size
-    const edemaRx = trx * 1.5, edemaRy = try_ * 1.5, edemaRz = trz * 1.5;
+    // GBMs are highly irregular and infiltrative
+    const irregularity = tumor.infiltrative ? 0.8 : 0.6;
+    const lobulation = 0.7; // GBMs are typically lobulated
     
-    for (let z = Math.floor(tcz - edemaRz - 5); z <= Math.ceil(tcz + edemaRz + 5); z++) {
-      for (let y = Math.floor(tcy - edemaRy - 5); y <= Math.ceil(tcy + edemaRy + 5); y++) {
-        for (let x = Math.floor(tcx - edemaRx - 5); x <= Math.ceil(tcx + edemaRx + 5); x++) {
+    // Edema extends 1.5-2x tumor size, also irregular
+    const edemaRx = trx * 1.7, edemaRy = try_ * 1.6, edemaRz = trz * 1.5;
+    const margin = Math.max(edemaRx, edemaRy, edemaRz) * 0.3;
+    
+    for (let z = Math.floor(tcz - edemaRz - margin); z <= Math.ceil(tcz + edemaRz + margin); z++) {
+      for (let y = Math.floor(tcy - edemaRy - margin); y <= Math.ceil(tcy + edemaRy + margin); y++) {
+        for (let x = Math.floor(tcx - edemaRx - margin); x <= Math.ceil(tcx + edemaRx + margin); x++) {
           if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth) continue;
           
           const idx = z * height * width + y * width + x;
-          const tumorDist = ellipsoidSDF(x, y, z, tcx, tcy, tcz, trx, try_, trz);
-          const edemaDist = ellipsoidSDF(x, y, z, tcx, tcy, tcz, edemaRx, edemaRy, edemaRz);
+          
+          // Irregular tumor shape
+          const tumorDist = irregularTumorSDF(
+            x, y, z,
+            tcx, tcy, tcz,
+            trx, try_, trz,
+            tumorSeed,
+            irregularity,
+            lobulation
+          );
+          
+          // Irregular edema (finger-like extensions following white matter tracts)
+          const edemaDist = irregularTumorSDF(
+            x, y, z,
+            tcx, tcy, tcz,
+            edemaRx, edemaRy, edemaRz,
+            tumorSeed + 500,
+            0.5, // Less irregular than tumor
+            0.3
+          );
           
           if (tumorDist < 0) {
             mask[idx] = 1;
             
-            // Necrotic center
-            const necrosisDist = tumorDist / (tumor.necrosis || 0.01);
-            if (necrosisDist > -0.4 && tumor.necrosis) {
-              data[idx] = MRI.TUMOR_NECROSIS + smoothNoise(x * 0.3, y * 0.3, z * 0.3) * 30;
-            } else if (tumor.enhancement && tumorDist > -4) {
-              // Enhancing rim
-              data[idx] = MRI.TUMOR_ENHANCED + smoothNoise(x * 0.2, y * 0.2, z * 0.2) * 50;
+            // Check for necrotic core (irregular shape)
+            if (tumor.necrosis && tumor.necrosis > 0) {
+              const necDist = necroticCoreSDF(
+                x, y, z,
+                tcx, tcy, tcz,
+                trx, try_, trz,
+                tumor.necrosis,
+                tumorSeed
+              );
+              
+              if (necDist < 0) {
+                // Necrotic center - low signal with heterogeneity
+                data[idx] = MRI.TUMOR_NECROSIS + fbmNoise(x * 0.25, y * 0.25, z * 0.25, 3) * 50;
+                continue;
+              }
+            }
+            
+            // Enhancing rim (thick, irregular enhancement typical of GBM)
+            if (tumor.enhancement && tumorDist > -5) {
+              const enhanceFactor = smoothstep(-5, -1, tumorDist);
+              const baseEnhance = MRI.TUMOR_ENHANCED;
+              // Add irregular enhancement pattern
+              const enhanceNoise = fbmNoise(x * 0.2 + tumorSeed, y * 0.2, z * 0.2, 3);
+              data[idx] = baseEnhance + enhanceNoise * 80 * enhanceFactor;
             } else {
-              data[idx] = MRI.TUMOR_SOLID + smoothNoise(x * 0.25, y * 0.25, z * 0.25) * 60 * (tumor.heterogeneity || 0.5);
+              // Solid enhancing tumor
+              const hetNoise = fbmNoise(x * 0.15, y * 0.15, z * 0.15, 4);
+              data[idx] = MRI.TUMOR_SOLID + hetNoise * 80 * (tumor.heterogeneity || 0.5);
             }
           } else if (edemaDist < 0) {
-            // Surrounding edema (not marked in mask - only tumor is)
-            const edemaBlend = smoothstep(-1, 0, edemaDist);
-            data[idx] = MRI.EDEMA * (1 - edemaBlend) + data[idx] * edemaBlend;
+            // Surrounding vasogenic edema (T2 hyperintense)
+            // Edema follows white matter tracts - add directional bias
+            const edemaIntensity = MRI.EDEMA + fbmNoise(x * 0.1, y * 0.15, z * 0.1, 3) * 60;
+            const edemaBlend = smoothstep(-2, 0, edemaDist);
+            data[idx] = edemaIntensity * (1 - edemaBlend * 0.5) + data[idx] * (edemaBlend * 0.5);
           }
         }
       }
