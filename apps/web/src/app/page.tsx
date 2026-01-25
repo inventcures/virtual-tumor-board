@@ -1,322 +1,361 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { TumorBoardUI } from "@/components/TumorBoardUI";
-import { CaseSummary } from "@/components/CaseSummary";
-import { ImagingReviewTab } from "@/components/ImagingReviewTab";
-import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload } from "lucide-react";
 import Link from "next/link";
-import { SAMPLE_CASES, SampleCase, CASE_SUMMARY } from "@/lib/sample-cases";
+import { 
+  Brain, 
+  Upload, 
+  FlaskConical, 
+  Shield, 
+  BookOpen, 
+  Mail, 
+  ExternalLink,
+  Users,
+  FileText,
+  Stethoscope,
+  Microscope,
+  Radiation,
+  Heart,
+  Dna,
+  AlertTriangle,
+  ChevronRight,
+  Github
+} from "lucide-react";
 
-// Convert SampleCase to the format expected by CaseSummary
-function convertToCaseData(sampleCase: SampleCase) {
-  return {
-    id: sampleCase.id,
-    patient: {
-      id: `patient-${sampleCase.caseNumber}`,
-      mrn: `MRN-2024-${String(sampleCase.caseNumber).padStart(5, '0')}`,
-      name: sampleCase.patient.name,
-      age: sampleCase.patient.age,
-      gender: sampleCase.patient.gender.toLowerCase() as "male" | "female",
-      ecogPs: sampleCase.patient.ecog,
-      comorbidities: sampleCase.patient.comorbidities.split(", "),
-      smokingHistory: sampleCase.patient.smokingHistory || "Never smoker",
-      insuranceType: sampleCase.patient.insurance.toLowerCase().includes("ayushman") ? "ayushman_bharat" : "private",
-      state: sampleCase.patient.location,
-      language: "hindi",
-    },
-    diagnosis: {
-      cancerType: sampleCase.cancer.type.toLowerCase(),
-      histology: sampleCase.cancer.histology,
-      histologyCode: "8000/3",
-      primarySite: sampleCase.cancer.primarySite,
-      primarySiteCode: "C00.0",
-      stage: {
-        clinical: sampleCase.cancer.tnm,
-        composite: sampleCase.cancer.stage,
-        stagingSystem: sampleCase.cancer.stagingSystem.toLowerCase(),
-      },
-      biomarkers: sampleCase.biomarkers.map(b => ({
-        name: b.name,
-        result: b.value,
-        method: "IHC/NGS",
-        interpretation: b.actionable ? "Actionable" : undefined,
-      })),
-      genomics: {
-        testType: "panel" as const,
-        mutations: sampleCase.genomics.mutations.map(m => ({
-          gene: m.gene,
-          variant: m.variant,
-          vaf: 30,
-          classification: "pathogenic" as const,
-          actionable: m.actionable,
-        })),
-        tmb: sampleCase.genomics.tmb,
-        msi: sampleCase.genomics.msi,
-      },
-      diagnosisDate: new Date(),
-    },
-    clinicalQuestion: sampleCase.clinicalQuestion,
-    priority: "routine" as const,
-    submittedAt: new Date(),
-  };
-}
+// Specialist agents
+const SPECIALISTS = [
+  { name: "Medical Oncologist", icon: Stethoscope, guidelines: "NCCN, ESMO" },
+  { name: "Surgical Oncologist", icon: Users, guidelines: "SSO, ACS" },
+  { name: "Radiation Oncologist", icon: Radiation, guidelines: "ASTRO, ESTRO" },
+  { name: "Pathologist", icon: Microscope, guidelines: "CAP, WHO" },
+  { name: "Radiologist", icon: FileText, guidelines: "ACR, RSNA" },
+  { name: "Palliative Care", icon: Heart, guidelines: "ASCO, MASCC" },
+  { name: "Molecular/Genetics", icon: Dna, guidelines: "ACMG, AMP" },
+];
 
-type TabType = "case" | "imaging" | "deliberation";
-
-export default function Home() {
-  const [currentCaseIndex, setCurrentCaseIndex] = useState(0);
-  const [deliberationStarted, setDeliberationStarted] = useState(false);
-  const [deliberationKey, setDeliberationKey] = useState(0); // To force re-mount
-  const [activeTab, setActiveTab] = useState<TabType>("case");
-
-  const currentCase = SAMPLE_CASES[currentCaseIndex];
-  const caseData = convertToCaseData(currentCase);
-
-  const handleStartDeliberation = useCallback(() => {
-    setDeliberationStarted(true);
-    setDeliberationKey(prev => prev + 1);
-  }, []);
-
-  const handleRunAnother = useCallback(() => {
-    // Cycle to next case
-    setCurrentCaseIndex(prev => (prev + 1) % SAMPLE_CASES.length);
-    setDeliberationStarted(false);
-  }, []);
-
-  const handlePreviousCase = useCallback(() => {
-    setCurrentCaseIndex(prev => (prev - 1 + SAMPLE_CASES.length) % SAMPLE_CASES.length);
-    setDeliberationStarted(false);
-  }, []);
-
-  const handleNextCase = useCallback(() => {
-    setCurrentCaseIndex(prev => (prev + 1) % SAMPLE_CASES.length);
-    setDeliberationStarted(false);
-  }, []);
-
+export default function LandingPage() {
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      {/* Navigation */}
+      <nav className="border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                <Brain className="w-6 h-6 text-white" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <Brain className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Virtual Tumor Board</h1>
-                <p className="text-xs text-slate-400">AI-Powered Multi-Agent Oncology MDT</p>
+                <h1 className="text-lg sm:text-xl font-bold text-white">Virtual Tumor Board</h1>
+                <p className="text-[10px] sm:text-xs text-slate-500 hidden sm:block">AI-Powered MDT Simulation</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 text-sm text-slate-400">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <a 
+                href="https://github.com/inventcures/virtual-tumor-board"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 text-slate-400 hover:text-white transition-colors"
+                aria-label="GitHub"
+              >
+                <Github className="w-5 h-5" />
+              </a>
+              <a 
+                href="https://inventcures.github.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors hidden sm:block"
+              >
+                inventcures
+              </a>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative overflow-hidden">
+        {/* Background gradient orbs */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+        
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+          <div className="text-center max-w-3xl mx-auto">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs sm:text-sm mb-6">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+              Open Source Research Tool
+            </div>
+
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+              AI-Simulated{" "}
+              <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Multi-Disciplinary
+              </span>{" "}
+              Tumor Board
+            </h1>
+            
+            <p className="text-base sm:text-lg text-slate-400 mb-8 max-w-2xl mx-auto leading-relaxed">
+              Experience how 7 AI oncology specialists deliberate on cancer cases, 
+              grounded in international clinical guidelines. Built for research, 
+              education, and exploring AI in oncology.
+            </p>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+              <Link 
+                href="/demo"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 transition-all"
+              >
+                <FlaskConical className="w-5 h-5" />
+                Try Demo Cases
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+              
               <Link 
                 href="/upload"
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition-all shadow-lg shadow-emerald-500/20"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold border border-slate-700 hover:border-slate-600 transition-all"
               >
-                <Upload className="w-4 h-4" />
-                <span className="font-medium">Upload Your Records</span>
+                <Upload className="w-5 h-5" />
+                Upload Real Records
               </Link>
-              <div className="hidden md:flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                <span>7 Specialists</span>
-              </div>
-              <div className="hidden md:flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                <span>256 Guidelines</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <span className="text-emerald-400">Online</span>
-              </div>
+            </div>
+
+            {/* Privacy note */}
+            <div className="flex items-center justify-center gap-2 text-xs sm:text-sm text-slate-500">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              <span>No data stored on servers. Processing happens in your browser.</span>
             </div>
           </div>
         </div>
-      </header>
+      </section>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Case Selector */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handlePreviousCase}
-              disabled={deliberationStarted}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5 text-slate-300" />
-            </button>
-            
-            <div className="text-center">
-              <div className="text-sm text-slate-500">Sample Case</div>
-              <div className="text-lg font-semibold text-white">
-                {currentCaseIndex + 1} of {SAMPLE_CASES.length}
-              </div>
+      {/* What is this? */}
+      <section className="py-12 sm:py-16 border-t border-slate-800/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="max-w-3xl">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+              What is a Virtual Tumor Board?
+            </h2>
+            <p className="text-slate-400 leading-relaxed mb-6">
+              A <strong className="text-white">Tumor Board</strong> (or Multi-Disciplinary Team meeting) is where 
+              oncology specialists from different disciplines come together to discuss complex cancer cases and 
+              agree on the best treatment plan.
+            </p>
+            <p className="text-slate-400 leading-relaxed">
+              This tool <strong className="text-white">simulates</strong> that process using AI agents, each representing 
+              a different oncology subspecialty, grounded in their respective clinical society guidelines. 
+              It's designed for <strong className="text-white">research and educational exploration</strong> of how 
+              AI might assist in oncology decision-making.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Specialists Grid */}
+      <section className="py-12 sm:py-16 border-t border-slate-800/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-6">
+            7 Specialist AI Agents
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
+            {SPECIALISTS.map((specialist) => {
+              const Icon = specialist.icon;
+              return (
+                <div 
+                  key={specialist.name}
+                  className="p-3 sm:p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 transition-colors"
+                >
+                  <Icon className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-400 mb-2" />
+                  <p className="text-xs sm:text-sm font-medium text-white mb-1 leading-tight">
+                    {specialist.name}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-slate-500">
+                    {specialist.guidelines}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Two CTAs */}
+      <section className="py-12 sm:py-16 border-t border-slate-800/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid sm:grid-cols-2 gap-6">
+            {/* Demo Cases */}
+            <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
+              <FlaskConical className="w-10 h-10 text-indigo-400 mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">
+                Try with Demo Cases
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Explore 10 synthetic cancer cases across lung, breast, colorectal, 
+                head & neck, and more. See how the AI agents deliberate and reach consensus.
+              </p>
+              <ul className="text-xs text-slate-500 space-y-1 mb-6">
+                <li>• 10 diverse cancer types</li>
+                <li>• Includes Indian clinical context (PMJAY, drug availability)</li>
+                <li>• Real DICOM imaging from TCIA</li>
+              </ul>
+              <Link 
+                href="/demo"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors"
+              >
+                Launch Demo
+                <ChevronRight className="w-4 h-4" />
+              </Link>
             </div>
-            
-            <button
-              onClick={handleNextCase}
-              disabled={deliberationStarted}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight className="w-5 h-5 text-slate-300" />
-            </button>
-          </div>
-          
-          {/* Case Type Badge */}
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1 rounded-full text-sm font-medium bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-              {currentCase.cancer.type}
-            </span>
-            <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
-              {currentCase.cancer.stage}
-            </span>
-            <span className="text-sm text-slate-500">
-              USA Rank #{currentCase.incidenceContext.usaRank} | India Rank #{currentCase.incidenceContext.indiaRank}
-            </span>
+
+            {/* Upload Records */}
+            <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
+              <Upload className="w-10 h-10 text-emerald-400 mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">
+                Upload Real Records
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Upload your own cancer medical records (pathology, radiology, genomics) 
+                and see what the AI tumor board suggests. 
+              </p>
+              <ul className="text-xs text-slate-500 space-y-1 mb-6">
+                <li>• <strong className="text-emerald-400">No PII stored</strong> - processing in browser</li>
+                <li>• Session auto-deletes after 24 hours</li>
+                <li>• Supports PDF, JPG, PNG</li>
+              </ul>
+              <Link 
+                href="/upload"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors"
+              >
+                Upload Records
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* Case Pills */}
-        <div className="mb-6 flex flex-wrap gap-2">
-          {SAMPLE_CASES.map((sCase, idx) => (
-            <button
-              key={sCase.id}
-              onClick={() => {
-                if (!deliberationStarted) {
-                  setCurrentCaseIndex(idx);
-                }
-              }}
-              disabled={deliberationStarted}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                idx === currentCaseIndex
-                  ? "bg-indigo-600 text-white"
-                  : "bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
-              }`}
-            >
-              {idx + 1}. {sCase.cancer.type}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Navigation */}
-        {!deliberationStarted && (
-          <div className="mb-6 flex items-center gap-1 p-1 bg-slate-800/50 rounded-lg w-fit">
-            <button
-              onClick={() => setActiveTab("case")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "case"
-                  ? "bg-slate-700 text-white"
-                  : "text-slate-400 hover:text-slate-300"
-              }`}
-            >
-              <Stethoscope className="w-4 h-4" />
-              Case Summary
-            </button>
-            <button
-              onClick={() => setActiveTab("imaging")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "imaging"
-                  ? "bg-slate-700 text-white"
-                  : "text-slate-400 hover:text-slate-300"
-              }`}
-            >
-              <Image className="w-4 h-4" />
-              Imaging Review
-            </button>
+      {/* Origin Story */}
+      <section className="py-12 sm:py-16 border-t border-slate-800/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex items-start gap-4">
+            <BookOpen className="w-8 h-8 text-purple-400 flex-shrink-0 mt-1" />
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">
+                Origin Story
+              </h2>
+              <p className="text-slate-400 leading-relaxed mb-4">
+                This project started as an exploration of multi-agent AI systems in healthcare. 
+                Having witnessed tumor board discussions in Indian hospitals, I wanted to see if 
+                AI agents could simulate the nuanced deliberation between specialists—while being 
+                grounded in evidence-based guidelines.
+              </p>
+              <p className="text-slate-400 leading-relaxed mb-4">
+                The goal isn't to replace tumor boards, but to explore how AI might democratize 
+                access to multi-disciplinary oncology expertise, especially in resource-limited settings 
+                where patients may not have access to a full MDT.
+              </p>
+              <a 
+                href="https://inventcures.github.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 text-sm transition-colors"
+              >
+                Read more on inventcures.github.io
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
           </div>
-        )}
+        </div>
+      </section>
 
-        {!deliberationStarted ? (
-          <>
-            {activeTab === "case" && (
-              <div className="space-y-6">
-                {/* Case Summary */}
-                <CaseSummary caseData={caseData} />
+      {/* Disclaimer */}
+      <section className="py-12 sm:py-16 border-t border-slate-800/50 bg-amber-500/5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex items-start gap-4 p-4 sm:p-6 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <AlertTriangle className="w-8 h-8 text-amber-400 flex-shrink-0 mt-1" />
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-amber-400 mb-2">
+                Important Disclaimer
+              </h2>
+              <p className="text-slate-300 text-sm leading-relaxed mb-3">
+                This is a <strong>research and educational tool</strong>, NOT a Clinical Decision Support System (CDSS) 
+                or medical device. It is <strong>NOT a substitute</strong> for professional medical advice, diagnosis, 
+                or treatment from qualified oncologists.
+              </p>
+              <ul className="text-xs text-slate-400 space-y-1">
+                <li>• AI-generated opinions may contain errors or hallucinations</li>
+                <li>• Always consult qualified oncologists for real medical decisions</li>
+                <li>• Not validated for clinical use or patient care</li>
+                <li>• For informational and research purposes only</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
 
-                {/* Start Button */}
-                <div className="flex justify-center">
-                  <button
-                    onClick={handleStartDeliberation}
-                    className="group relative px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-semibold text-lg text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-300 hover:scale-105"
-                  >
-                    <span className="flex items-center gap-3">
-                      <Brain className="w-6 h-6" />
-                      Start AI Tumor Board Deliberation
-                    </span>
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-indigo-400 to-purple-400 opacity-0 group-hover:opacity-20 transition-opacity" />
-                  </button>
-                </div>
-
-                {/* Info Cards */}
-                <div className="grid grid-cols-3 gap-4 mt-8">
-                  <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-                    <h3 className="font-semibold text-white mb-2">7 Specialist Agents</h3>
-                    <p className="text-sm text-slate-400">
-                      Surgical, Medical, Radiation Oncology, Palliative Care, Radiology, Pathology, and Genetics specialists deliberate on your case.
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-                    <h3 className="font-semibold text-white mb-2">Evidence-Based</h3>
-                    <p className="text-sm text-slate-400">
-                      Grounded in NCCN, ESMO, ASTRO, ACR, CAP guidelines with real-time retrieval and citation.
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-                    <h3 className="font-semibold text-white mb-2">Indian Context</h3>
-                    <p className="text-sm text-slate-400">
-                      Considers drug availability, cost, PMJAY coverage, and resource constraints in Indian healthcare settings.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Case Diversity Stats */}
-                <div className="mt-8 p-4 rounded-xl bg-slate-900/50 border border-slate-700">
-                  <h3 className="font-semibold text-white mb-3">Sample Case Diversity</h3>
-                  <div className="grid grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="text-slate-500">Total Cases:</span>
-                      <span className="text-white ml-2">{CASE_SUMMARY.totalCases}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Organ Sites:</span>
-                      <span className="text-white ml-2">{CASE_SUMMARY.organSites.length}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Male/Female:</span>
-                      <span className="text-white ml-2">{CASE_SUMMARY.genderDistribution.male}/{CASE_SUMMARY.genderDistribution.female}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Metastatic:</span>
-                      <span className="text-white ml-2">{CASE_SUMMARY.stageDistribution.metastatic} cases</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "imaging" && (
-              <ImagingReviewTab 
-                caseId={currentCase.id}
-                cancerType={currentCase.cancer.type}
-                patientName={currentCase.patient.name}
-              />
-            )}
-          </>
-        ) : (
-          <TumorBoardUI 
-            key={deliberationKey}
-            caseData={caseData} 
-            caseId={currentCase.id}
-            onRunAnother={handleRunAnother}
-          />
-        )}
-      </main>
+      {/* Contact / Deploy */}
+      <section className="py-12 sm:py-16 border-t border-slate-800/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center max-w-2xl mx-auto">
+            <Mail className="w-10 h-10 text-indigo-400 mx-auto mb-4" />
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">
+              Interested in Piloting at Your Hospital?
+            </h2>
+            <p className="text-slate-400 text-sm mb-6">
+              If you're a hospital administrator, oncologist, or healthcare IT leader interested in 
+              exploring AI-assisted tumor boards, I'd love to hear from you.
+            </p>
+            <a 
+              href="mailto:spiff007@gmail.com?subject=Interested%20in%20piloting%20AI%20tumor%20board%20tool"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium border border-slate-700 hover:border-slate-600 transition-all"
+            >
+              <Mail className="w-5 h-5" />
+              Email: spiff007@gmail.com
+            </a>
+          </div>
+        </div>
+      </section>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 mt-12 py-4">
-        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-slate-500">
-          <p>AI-generated recommendations. Always verify with clinical judgment.</p>
-          <p className="mt-1 text-xs">Made in India 🇮🇳, For the World 🌍</p>
+      <footer className="border-t border-slate-800/50 py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                <Brain className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-sm text-slate-400">Virtual Tumor Board</span>
+            </div>
+            
+            <div className="flex items-center gap-6 text-sm text-slate-500">
+              <a 
+                href="https://github.com/inventcures/virtual-tumor-board"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white transition-colors flex items-center gap-1"
+              >
+                <Github className="w-4 h-4" />
+                GitHub
+              </a>
+              <a 
+                href="https://inventcures.github.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white transition-colors"
+              >
+                inventcures
+              </a>
+              <Link href="/demo" className="hover:text-white transition-colors">
+                Demo
+              </Link>
+              <Link href="/upload" className="hover:text-white transition-colors">
+                Upload
+              </Link>
+            </div>
+            
+            <p className="text-xs text-slate-600">
+              Made with care in India 🇮🇳
+            </p>
+          </div>
         </div>
       </footer>
     </div>
