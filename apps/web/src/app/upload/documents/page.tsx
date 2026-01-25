@@ -549,7 +549,7 @@ export default function DocumentUploadPage() {
           filename: doc.filename,
           mimeType: fileToProcess.type || doc.mimeType,
           fileSize: fileToProcess.size,
-          base64Data: base64,
+          base64Data: '', // Don't store base64 in localStorage - too large!
           classifiedType: classifiedType,
           classificationConfidence: classificationConfidence,
           autoDetected: doc.autoDetected,
@@ -566,7 +566,7 @@ export default function DocumentUploadPage() {
         await new Promise(r => setTimeout(r, 100));
       }
 
-      // Save to localStorage
+      // Save to localStorage (without base64 data - too large for localStorage)
       setProcessingStatus(prev => ({
         ...prev,
         stage: 'saving',
@@ -578,10 +578,28 @@ export default function DocumentUploadPage() {
         documents: processedDocs,
       };
 
-      await saveToLocalStorageChunked(
-        "vtb_upload_session",
-        JSON.stringify(updatedSession)
-      );
+      try {
+        // Try to save - localStorage has ~5MB limit
+        const sessionJson = JSON.stringify(updatedSession);
+        const sizeInMB = (sessionJson.length / (1024 * 1024)).toFixed(2);
+        console.log(`Session size: ${sizeInMB} MB`);
+        
+        if (sessionJson.length > 4 * 1024 * 1024) {
+          console.warn('Session data large, may exceed localStorage limit');
+        }
+        
+        localStorage.setItem("vtb_upload_session", sessionJson);
+      } catch (storageError: any) {
+        console.error('localStorage error:', storageError);
+        // If quota exceeded, try clearing old data first
+        if (storageError.name === 'QuotaExceededError' || storageError.code === 22) {
+          console.log('Quota exceeded, clearing old sessions...');
+          localStorage.removeItem("vtb_upload_session");
+          localStorage.setItem("vtb_upload_session", JSON.stringify(updatedSession));
+        } else {
+          throw storageError;
+        }
+      }
 
       setProcessingStatus(prev => ({
         ...prev,
