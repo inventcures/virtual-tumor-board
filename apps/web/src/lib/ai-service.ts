@@ -29,6 +29,7 @@ export interface AIError {
 // Check if error should trigger fallback
 function shouldFallbackToGemini(status: number): boolean {
   return (
+    status === 400 ||  // Bad request (often credits exhausted on Anthropic)
     status === 402 ||  // Payment required (credits exhausted)
     status === 429 ||  // Rate limited
     status >= 500      // Server errors
