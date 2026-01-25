@@ -1432,7 +1432,17 @@ export default function DocumentUploadPage() {
               </div>
               <div>
                 <h2 className="font-semibold text-white">AI Analysis Results</h2>
-                <p className="text-xs text-slate-400">MedGemma Medical Imaging AI</p>
+                <p className="text-xs text-slate-400">
+                  {selectedStudyForView.medgemmaAnalysis?.modelInfo ? (
+                    <>
+                      <span className="text-cyan-400">{selectedStudyForView.medgemmaAnalysis.modelInfo.model}</span>
+                      {' via '}
+                      <span className="text-slate-300">{selectedStudyForView.medgemmaAnalysis.modelInfo.provider}</span>
+                    </>
+                  ) : (
+                    'MedGemma Medical Imaging AI'
+                  )}
+                </p>
               </div>
             </div>
             <button
@@ -1572,6 +1582,32 @@ export default function DocumentUploadPage() {
                     </span>
                   </div>
                 </div>
+
+                {/* Model Info */}
+                {selectedStudyForView.medgemmaAnalysis.modelInfo && (
+                  <div className="bg-slate-800/30 rounded-xl p-3 border border-slate-700/50">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Model</span>
+                      <span className="text-cyan-400 font-mono">
+                        {selectedStudyForView.medgemmaAnalysis.modelInfo.model}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-1.5">
+                      <span className="text-slate-500">Provider</span>
+                      <span className="text-slate-300">
+                        {selectedStudyForView.medgemmaAnalysis.modelInfo.provider}
+                      </span>
+                    </div>
+                    {selectedStudyForView.medgemmaAnalysis.modelInfo.version && (
+                      <div className="flex items-center justify-between text-xs mt-1.5">
+                        <span className="text-slate-500">Version</span>
+                        <span className="text-slate-400">
+                          {selectedStudyForView.medgemmaAnalysis.modelInfo.version}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
 

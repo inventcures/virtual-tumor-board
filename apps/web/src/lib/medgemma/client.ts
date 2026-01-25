@@ -47,7 +47,13 @@ export class MedGemmaClient {
     if (this.config.provider === 'vertex-ai' || process.env.GOOGLE_CLOUD_PROJECT) {
       try {
         console.log('[MedGemma] Attempting Vertex AI (Primary)...');
-        return await this.callVertexAI(image, prompt);
+        const response = await this.callVertexAI(image, prompt);
+        response.modelInfo = {
+          model: 'medgemma-27b-it',
+          provider: 'Google Vertex AI',
+          version: 'Model Garden'
+        };
+        return response;
       } catch (error) {
         console.warn('[MedGemma] Vertex AI failed, trying HF Space fallback:', error);
       }
@@ -56,7 +62,13 @@ export class MedGemmaClient {
     // Priority 2: HuggingFace Space (Fallback - MedGemma 27B)
     try {
       console.log('[MedGemma] Attempting HuggingFace Space (Fallback)...');
-      return await this.callHFSpace(image, prompt);
+      const response = await this.callHFSpace(image, prompt);
+      response.modelInfo = {
+        model: 'medgemma-27b-it',
+        provider: 'HuggingFace Space',
+        version: 'ZeroGPU (warshanks/medgemma-27b-it)'
+      };
+      return response;
     } catch (error) {
       console.warn('[MedGemma] HF Space failed, trying Gemini fallback:', error);
     }
@@ -64,7 +76,13 @@ export class MedGemmaClient {
     // Priority 3: Gemini (Final fallback)
     try {
       console.log('[MedGemma] Attempting Gemini (Final fallback)...');
-      return await this.callGemini(image, prompt);
+      const response = await this.callGemini(image, prompt);
+      response.modelInfo = {
+        model: 'gemini-2.0-flash-exp',
+        provider: 'Google AI Studio',
+        version: 'Gemini 2.0 Flash (Vision fallback)'
+      };
+      return response;
     } catch (error) {
       console.error('[MedGemma] All providers failed:', error);
       return this.generateDemoResponse(image.metadata, context);
@@ -597,6 +615,11 @@ export class MedGemmaClient {
         'Or configure Google AI API key for Gemini fallback',
       ],
       confidence: 0.3,
+      modelInfo: {
+        model: 'demo-mode',
+        provider: 'Local Demo',
+        version: 'No API configured'
+      }
     };
   }
 }

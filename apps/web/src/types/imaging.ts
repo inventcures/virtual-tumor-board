@@ -11,6 +11,12 @@ export interface MedGemmaResponse {
   recommendations: string[];
   confidence: number;
   stagingImplication?: string;
+  // Model and provider info
+  modelInfo?: {
+    model: string;        // e.g., "medgemma-27b-text-it", "gemini-2.0-flash"
+    provider: string;     // e.g., "Vertex AI", "HuggingFace Space", "Gemini"
+    version?: string;     // optional version info
+  };
 }
 
 export interface Finding {
