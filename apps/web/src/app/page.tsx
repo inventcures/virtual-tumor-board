@@ -4,7 +4,8 @@ import { useState, useCallback } from "react";
 import { TumorBoardUI } from "@/components/TumorBoardUI";
 import { CaseSummary } from "@/components/CaseSummary";
 import { ImagingReviewTab } from "@/components/ImagingReviewTab";
-import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope } from "lucide-react";
+import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload } from "lucide-react";
+import Link from "next/link";
 import { SAMPLE_CASES, SampleCase, CASE_SUMMARY } from "@/lib/sample-cases";
 
 // Convert SampleCase to the format expected by CaseSummary
@@ -109,11 +110,18 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-4 text-sm text-slate-400">
-              <div className="flex items-center gap-2">
+              <Link 
+                href="/upload"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition-all shadow-lg shadow-emerald-500/20"
+              >
+                <Upload className="w-4 h-4" />
+                <span className="font-medium">Upload Your Records</span>
+              </Link>
+              <div className="hidden md:flex items-center gap-2">
                 <Users className="w-4 h-4" />
                 <span>7 Specialists</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 <span>256 Guidelines</span>
               </div>
