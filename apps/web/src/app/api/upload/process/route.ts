@@ -10,8 +10,9 @@ import type { DocumentType, ExtractedClinicalData } from "@/types/user-upload";
 export const runtime = "edge";
 export const maxDuration = 60; // 60 seconds for processing
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// Initialize Gemini - check multiple env var names
+const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY || "";
+const genAI = new GoogleGenerativeAI(GEMINI_KEY);
 
 // Document classification patterns (fast heuristic check first)
 const DOCUMENT_PATTERNS: Record<DocumentType, RegExp[]> = {
@@ -302,9 +303,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if Gemini API key is available
-    if (!process.env.GEMINI_API_KEY) {
+    if (!GEMINI_KEY) {
       return NextResponse.json(
-        { error: "Gemini API key not configured" },
+        { error: "Gemini API key not configured (checked GEMINI_API_KEY, GOOGLE_AI_API_KEY, GOOGLE_API_KEY)" },
         { status: 500 }
       );
     }
