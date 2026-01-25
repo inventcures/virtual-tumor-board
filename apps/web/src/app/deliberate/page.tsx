@@ -394,6 +394,11 @@ export default function DeliberatePage() {
             isComplete={phase === "completed"}
             agentResponses={agentResponses}
             onAgentClick={scrollToAgent}
+            caseInfo={{
+              cancerSite: cancerSite?.label || session.cancerSite,
+              stage: session.staging?.stage || session.staging?.tnm,
+              documentCount: session.documents.length,
+            }}
           />
         )}
 
