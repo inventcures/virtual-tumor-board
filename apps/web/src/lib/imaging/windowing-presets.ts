@@ -138,3 +138,18 @@ export function autoWindow(data: Float32Array | number[]): { center: number; wid
   
   return { center, width };
 }
+
+// Convenient object format for presets
+export const WINDOWING_PRESETS: Record<string, WindowPreset> = {
+  lung: CT_PRESETS[0],
+  mediastinum: CT_PRESETS[1],
+  softTissue: CT_PRESETS[2],
+  bone: CT_PRESETS[3],
+  brain: CT_PRESETS[4],
+  liver: CT_PRESETS[5],
+  abdomen: CT_PRESETS[6],
+  stroke: CT_PRESETS[7],
+};
+
+// Type alias for clarity
+export type WindowingPreset = WindowPreset;

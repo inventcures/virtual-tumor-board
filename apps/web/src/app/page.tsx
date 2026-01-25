@@ -290,6 +290,7 @@ export default function Home() {
               <ImagingReviewTab 
                 caseId={currentCase.id}
                 cancerType={currentCase.cancer.type}
+                patientName={currentCase.patient.name}
               />
             )}
           </>
