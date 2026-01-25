@@ -293,6 +293,7 @@ export default function DocumentUploadPage() {
   // Refs for performance
   const abortControllerRef = useRef<AbortController | null>(null);
   const isMobileRef = useRef(false);
+  const imagingSectionRef = useRef<HTMLDivElement>(null);
 
   // Detect mobile on mount
   useEffect(() => {
@@ -861,7 +862,7 @@ export default function DocumentUploadPage() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-32">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-48">
         {/* Progress indicator */}
         <div className="mb-4 sm:mb-8">
           <div className="flex items-center justify-between text-xs sm:text-sm text-slate-400 mb-2">
@@ -1032,9 +1033,28 @@ export default function DocumentUploadPage() {
           {/* =============================================================================
               V6: MEDICAL IMAGING SECTION (DICOM/Camera/Gallery + MedGemma AI)
               ============================================================================= */}
-          <div className="border-t border-slate-700/50 pt-4 sm:pt-6">
+          <div ref={imagingSectionRef} className="border-t border-slate-700/50 pt-4 sm:pt-6 scroll-mt-4">
             <button
-              onClick={() => setShowImagingSection(!showImagingSection)}
+              onClick={() => {
+                const willShow = !showImagingSection;
+                setShowImagingSection(willShow);
+                // Scroll into view when expanding, with delay for render
+                // Works on both desktop and mobile browsers
+                if (willShow) {
+                  setTimeout(() => {
+                    const element = imagingSectionRef.current;
+                    if (element) {
+                      // Use scrollIntoView with fallback for older mobile browsers
+                      if ('scrollBehavior' in document.documentElement.style) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      } else {
+                        // Fallback for older browsers (some Android WebViews)
+                        element.scrollIntoView(true);
+                      }
+                    }
+                  }, 150); // Slightly longer delay for mobile rendering
+                }
+              }}
               className="w-full flex items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-cyan-900/30 to-indigo-900/30 rounded-xl border border-cyan-700/30 hover:border-cyan-600/50 transition-all"
             >
               <div className="flex items-center gap-3">
