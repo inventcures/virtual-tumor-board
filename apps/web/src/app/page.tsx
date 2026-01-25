@@ -250,7 +250,7 @@ export default function LandingPage() {
                 and to explore how AI might democratize access to multi-disciplinary oncology thinking.
               </p>
               <a 
-                href="https://inventcures.github.io"
+                href="https://inventcures.github.io/ai-powered-virtual-mtb/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 text-sm transition-colors"
