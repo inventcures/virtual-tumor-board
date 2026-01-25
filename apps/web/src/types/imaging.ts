@@ -204,10 +204,11 @@ export type QualityIssue =
 
 // MedGemma Config
 export interface MedGemmaConfig {
-  provider: 'vertex-ai' | 'huggingface' | 'self-hosted';
+  provider: 'hf-space' | 'vertex-ai' | 'huggingface' | 'self-hosted';
   model: 'medgemma-4b-it' | 'medgemma-27b-it';
   apiKey?: string;
   endpoint?: string;
+  spaceId?: string; // HuggingFace Space ID for hf-space provider
 }
 
 // Image Input for MedGemma

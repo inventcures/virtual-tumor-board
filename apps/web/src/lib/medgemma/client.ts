@@ -1,6 +1,10 @@
 /**
  * MedGemma API Client
- * Supports HuggingFace, Vertex AI, and Gemini fallback
+ * 
+ * Priority order:
+ * 1. Vertex AI Model Garden (Primary) - google/medgemma-27b-it
+ * 2. HuggingFace Space (Fallback) - MedGemma 27B on ZeroGPU
+ * 3. Gemini (Final fallback) - For when MedGemma is unavailable
  */
 
 import { 
@@ -13,9 +17,17 @@ import {
 } from "@/types/imaging";
 import { IMAGING_ANALYSIS_PROMPTS } from "./prompts";
 
+// HuggingFace Space running MedGemma 27B on ZeroGPU (fallback)
+const MEDGEMMA_27B_SPACE = "warshanks/medgemma-27b-it";
+const MEDGEMMA_SPACE_URL = `https://${MEDGEMMA_27B_SPACE.replace('/', '-')}.hf.space`;
+
+// Vertex AI Model Garden endpoint
+const VERTEX_AI_LOCATION = "us-central1";
+const VERTEX_AI_MODEL = "medgemma-27b-it";
+
 const DEFAULT_CONFIG: MedGemmaConfig = {
-  provider: 'huggingface',
-  model: 'medgemma-4b-it',
+  provider: 'vertex-ai', // Use Vertex AI as primary
+  model: 'medgemma-27b-it',
 };
 
 export class MedGemmaClient {
@@ -31,19 +43,246 @@ export class MedGemmaClient {
   ): Promise<MedGemmaResponse> {
     const prompt = this.buildPrompt(image.metadata, context);
 
-    try {
-      // Try MedGemma via HuggingFace first
-      if (this.config.provider === 'huggingface' && this.config.apiKey) {
-        return await this.callHuggingFace(image, prompt);
+    // Priority 1: Vertex AI (Primary)
+    if (this.config.provider === 'vertex-ai' || process.env.GOOGLE_CLOUD_PROJECT) {
+      try {
+        console.log('[MedGemma] Attempting Vertex AI (Primary)...');
+        return await this.callVertexAI(image, prompt);
+      } catch (error) {
+        console.warn('[MedGemma] Vertex AI failed, trying HF Space fallback:', error);
       }
+    }
 
-      // Fallback to Gemini
+    // Priority 2: HuggingFace Space (Fallback - MedGemma 27B)
+    try {
+      console.log('[MedGemma] Attempting HuggingFace Space (Fallback)...');
+      return await this.callHFSpace(image, prompt);
+    } catch (error) {
+      console.warn('[MedGemma] HF Space failed, trying Gemini fallback:', error);
+    }
+
+    // Priority 3: Gemini (Final fallback)
+    try {
+      console.log('[MedGemma] Attempting Gemini (Final fallback)...');
       return await this.callGemini(image, prompt);
     } catch (error) {
-      console.error('MedGemma analysis error:', error);
-      // Return demo response on error
+      console.error('[MedGemma] All providers failed:', error);
       return this.generateDemoResponse(image.metadata, context);
     }
+  }
+
+  /**
+   * Call Vertex AI Model Garden - MedGemma 27B
+   * Requires: GOOGLE_CLOUD_PROJECT, GOOGLE_APPLICATION_CREDENTIALS
+   */
+  private async callVertexAI(
+    image: MedGemmaImageInput,
+    prompt: string
+  ): Promise<MedGemmaResponse> {
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+    const location = process.env.VERTEX_AI_LOCATION || VERTEX_AI_LOCATION;
+    
+    if (!projectId) {
+      throw new Error('GOOGLE_CLOUD_PROJECT not configured');
+    }
+
+    // Get access token (requires gcloud auth or service account)
+    const accessToken = await this.getGoogleAccessToken();
+    
+    const endpoint = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${VERTEX_AI_MODEL}:generateContent`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: image.mimeType,
+                data: image.base64.replace(/^data:image\/\w+;base64,/, ''),
+              }
+            },
+            { text: prompt }
+          ]
+        }],
+        systemInstruction: {
+          parts: [{ text: 'You are an expert radiologist providing detailed medical image analysis.' }]
+        },
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2048,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Vertex AI error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return this.parseResponse(text);
+  }
+
+  /**
+   * Get Google Cloud access token
+   * Uses Application Default Credentials or service account
+   */
+  private async getGoogleAccessToken(): Promise<string> {
+    // Option 1: Use provided access token from environment
+    if (process.env.GOOGLE_ACCESS_TOKEN) {
+      return process.env.GOOGLE_ACCESS_TOKEN;
+    }
+
+    // Option 2: Use service account JSON key
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      const key = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      return await this.getAccessTokenFromServiceAccount(key);
+    }
+
+    // Option 3: Try metadata server (works on GCP)
+    try {
+      const response = await fetch(
+        'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+        { headers: { 'Metadata-Flavor': 'Google' } }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        return data.access_token;
+      }
+    } catch {
+      // Not running on GCP
+    }
+
+    throw new Error('No Google Cloud credentials available. Set GOOGLE_ACCESS_TOKEN or GOOGLE_SERVICE_ACCOUNT_KEY');
+  }
+
+  /**
+   * Get access token from service account key
+   */
+  private async getAccessTokenFromServiceAccount(key: {
+    client_email: string;
+    private_key: string;
+    token_uri: string;
+  }): Promise<string> {
+    // Create JWT
+    const now = Math.floor(Date.now() / 1000);
+    const header = { alg: 'RS256', typ: 'JWT' };
+    const payload = {
+      iss: key.client_email,
+      sub: key.client_email,
+      aud: key.token_uri,
+      iat: now,
+      exp: now + 3600,
+      scope: 'https://www.googleapis.com/auth/cloud-platform'
+    };
+
+    // Note: In production, use a proper JWT library
+    // This is a simplified implementation
+    const jwt = await this.signJWT(header, payload, key.private_key);
+
+    const response = await fetch(key.token_uri, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get access token from service account');
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  }
+
+  /**
+   * Sign JWT with RSA private key (simplified)
+   */
+  private async signJWT(
+    header: object, 
+    payload: object, 
+    privateKey: string
+  ): Promise<string> {
+    const encoder = new TextEncoder();
+    const headerB64 = btoa(JSON.stringify(header));
+    const payloadB64 = btoa(JSON.stringify(payload));
+    const data = encoder.encode(`${headerB64}.${payloadB64}`);
+
+    // Import private key
+    const pemContents = privateKey
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .replace(/\s/g, '');
+    const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      binaryKey,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+
+    const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, data);
+    const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+
+    return `${headerB64}.${payloadB64}.${signatureB64}`;
+  }
+
+  /**
+   * Call HuggingFace Space running MedGemma 27B
+   * Uses Gradio API
+   */
+  private async callHFSpace(
+    image: MedGemmaImageInput,
+    prompt: string
+  ): Promise<MedGemmaResponse> {
+    const spaceUrl = this.config.spaceId 
+      ? `https://${this.config.spaceId.replace('/', '-')}.hf.space`
+      : MEDGEMMA_SPACE_URL;
+
+    // Gradio API call
+    const response = await fetch(`${spaceUrl}/api/predict`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.config.apiKey ? { 'Authorization': `Bearer ${this.config.apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        data: [
+          // Message with image
+          {
+            text: prompt,
+            files: [{
+              data: image.base64,
+              name: 'image.png',
+              is_file: false,
+            }]
+          },
+          // System prompt
+          'You are an expert radiologist providing detailed medical image analysis.',
+          // Max tokens
+          2048
+        ],
+        fn_index: 0,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HF Space error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    // Gradio returns data in a specific format
+    const text = data.data?.[0]?.[0]?.[1] || data.data?.[0] || '';
+    return this.parseResponse(typeof text === 'string' ? text : JSON.stringify(text));
   }
 
   private buildPrompt(metadata: MedGemmaImageInput['metadata'], context: AnalysisContext): string {
