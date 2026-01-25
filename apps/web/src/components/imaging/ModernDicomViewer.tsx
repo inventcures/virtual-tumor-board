@@ -16,6 +16,7 @@ import { generateCaseVolume, CaseVolume, getSliceDimensions } from "@/lib/imagin
 import { getCaseImagingConfig, getDefaultImagingConfig, CaseImagingConfig, VolumeType } from "@/lib/imaging/case-imaging-config";
 import { WINDOWING_PRESETS, WindowingPreset } from "@/lib/imaging/windowing-presets";
 import { getRadiologyReport, generatePlaceholderReport } from "@/lib/imaging/radiology-reports";
+import { loadImageSeries, getSliceImageData, hasRealImages, RealImageSeries } from "@/lib/imaging/real-image-loader";
 
 // Types
 type ViewAxis = "axial" | "sagittal" | "coronal";
@@ -133,6 +134,10 @@ export function ModernDicomViewer({
   const [showReport, setShowReport] = useState(true);
   const [activeTool, setActiveTool] = useState<string>("crosshair");
   
+  // Real image support
+  const [realImageSeries, setRealImageSeries] = useState<RealImageSeries | null>(null);
+  const [useRealImages, setUseRealImages] = useState(true); // Prefer real images when available
+  
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -154,9 +159,10 @@ export function ModernDicomViewer({
     [caseId, cancerType]
   );
 
-  // Generate case-specific volume with tumor masks
+  // Generate case-specific volume with tumor masks OR load real images
   useEffect(() => {
     setIsLoading(true);
+    setRealImageSeries(null);
     
     // Get case config first
     const config = getCaseImagingConfig(caseId) || getDefaultImagingConfig();
@@ -171,7 +177,32 @@ export function ModernDicomViewer({
     const region = VOLUME_TYPE_TO_REGION[config.volumeType];
     setExpandedRegions([region]);
     
-    setTimeout(() => {
+    // Try to load real images first if available and preferred
+    const loadImages = async () => {
+      if (useRealImages && hasRealImages(caseId)) {
+        console.log(`[Viewer] Attempting to load real images for case: ${caseId}`);
+        try {
+          const realSeries = await loadImageSeries(caseId);
+          if (realSeries && realSeries.loaded && realSeries.images.length > 0) {
+            console.log(`[Viewer] Loaded ${realSeries.images.length} real images`);
+            setRealImageSeries(realSeries);
+            setMaxSlice(realSeries.images.length - 1);
+            setCurrentSlice(Math.floor(realSeries.images.length / 2));
+            // Use windowing from manifest if available
+            if (realSeries.manifest.window) {
+              setWindowCenter(realSeries.manifest.window.center);
+              setWindowWidth(realSeries.manifest.window.width);
+            }
+            setIsLoading(false);
+            return; // Successfully loaded real images
+          }
+        } catch (err) {
+          console.log(`[Viewer] Failed to load real images, falling back to procedural:`, err);
+        }
+      }
+      
+      // Fallback to procedural generation
+      console.log(`[Viewer] Using procedural generation for case: ${caseId}`);
       const caseVolume = generateCaseVolume(caseId, 256, 256, 100);
       setVolume(caseVolume);
       setMaxSlice(caseVolume.metadata.shape[0] - 1);
@@ -180,22 +211,45 @@ export function ModernDicomViewer({
       setWindowCenter(caseVolume.defaultWindow.center);
       setWindowWidth(caseVolume.defaultWindow.width);
       setIsLoading(false);
-    }, 100);
-  }, [caseId]);
+    };
+    
+    loadImages();
+  }, [caseId, useRealImages]);
 
-  // Render slice to canvas
+  // Render slice to canvas (supports both real images and procedural volumes)
   useEffect(() => {
-    if (!canvasRef.current || !volume) return;
+    if (!canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const imageData = volume.getSliceAsImageData(currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay);
-    canvas.width = imageData.width;
-    canvas.height = imageData.height;
-    ctx.putImageData(imageData, 0, 0);
-  }, [volume, currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay]);
+    // Try real images first
+    if (realImageSeries && realImageSeries.loaded) {
+      const imageData = getSliceImageData(
+        realImageSeries, 
+        currentSlice, 
+        windowCenter, 
+        windowWidth,
+        brightness,
+        contrast
+      );
+      if (imageData) {
+        canvas.width = imageData.width;
+        canvas.height = imageData.height;
+        ctx.putImageData(imageData, 0, 0);
+        return;
+      }
+    }
+    
+    // Fallback to procedural volume
+    if (volume) {
+      const imageData = volume.getSliceAsImageData(currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay);
+      canvas.width = imageData.width;
+      canvas.height = imageData.height;
+      ctx.putImageData(imageData, 0, 0);
+    }
+  }, [volume, realImageSeries, currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay, brightness, contrast]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -367,6 +421,13 @@ export function ModernDicomViewer({
 
           {/* Right - View Options */}
           <div className="flex items-center gap-2">
+            {/* Image Source Indicator */}
+            <div className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800/50 text-xs">
+              <span className={`w-2 h-2 rounded-full ${realImageSeries?.loaded ? 'bg-green-500' : 'bg-yellow-500'}`} />
+              <span className="text-slate-400">
+                {realImageSeries?.loaded ? 'Real Images' : 'Procedural'}
+              </span>
+            </div>
             <button 
               onClick={() => setShowTumorOverlay(!showTumorOverlay)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${

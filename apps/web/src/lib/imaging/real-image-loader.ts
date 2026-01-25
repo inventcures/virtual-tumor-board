@@ -34,18 +34,18 @@ const CASE_IMAGE_MAPPING: Record<string, { folder: string; seriesName: string }>
   'pediatric-gbm-brain': { folder: 'brain/brain_glioblastoma', seriesName: 'Brain MRI with GBM' },
   
   // Thorax CT
-  'lung-nsclc-kras-g12c': { folder: 'thorax/lung_nodule', seriesName: 'CT Chest with Lung Mass' },
-  'breast-her2-early': { folder: 'thorax/lung_nodule', seriesName: 'CT Chest/Breast' },
-  'esophageal-neoadjuvant': { folder: 'thorax/lung_nodule', seriesName: 'CT Chest/Esophagus' },
+  'lung-nsclc-kras-g12c': { folder: 'thorax/thorax_tumor', seriesName: 'CT Chest with Lung Mass' },
+  'breast-her2-early': { folder: 'thorax/thorax_tumor', seriesName: 'CT Chest/Breast' },
+  'esophageal-neoadjuvant': { folder: 'thorax/thorax_tumor', seriesName: 'CT Chest/Esophagus' },
   
   // Abdomen CT
-  'colorectal-msi-h-mets': { folder: 'abdomen/colon_mass', seriesName: 'CT Abdomen with Colon Mass' },
-  'gastric-stage-iii': { folder: 'abdomen/liver_metastasis', seriesName: 'CT Abdomen Gastric' },
-  'ovarian-brca1-hgsoc': { folder: 'abdomen/liver_metastasis', seriesName: 'CT Abdomen/Pelvis Ovarian' },
+  'colorectal-msi-h-mets': { folder: 'abdomen/abdomen_tumor', seriesName: 'CT Abdomen with Colon Mass' },
+  'gastric-stage-iii': { folder: 'abdomen/abdomen_tumor', seriesName: 'CT Abdomen Gastric' },
+  'ovarian-brca1-hgsoc': { folder: 'abdomen/abdomen_tumor', seriesName: 'CT Abdomen/Pelvis Ovarian' },
   
   // Pelvis CT
-  'cervix-locally-advanced': { folder: 'pelvis/pelvic_mass', seriesName: 'CT Pelvis Cervical' },
-  'prostate-mcrpc': { folder: 'pelvis/pelvic_mass', seriesName: 'CT Pelvis Prostate' },
+  'cervix-locally-advanced': { folder: 'pelvis/pelvis_tumor', seriesName: 'CT Pelvis Cervical' },
+  'prostate-mcrpc': { folder: 'pelvis/pelvis_tumor', seriesName: 'CT Pelvis Prostate' },
   
   // Head/Neck CT
   'oral-cavity-locally-advanced': { folder: 'head_neck/head_neck_tumor', seriesName: 'CT Head/Neck Oral Cavity' },
