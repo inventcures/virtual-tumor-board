@@ -13,6 +13,7 @@ import {
   Download, Share2, Settings, Info, FileText, Target
 } from "lucide-react";
 import { generateCaseVolume, CaseVolume, getSliceDimensions } from "@/lib/imaging/case-volume-generator";
+import { getCaseImagingConfig, getDefaultImagingConfig, CaseImagingConfig, VolumeType } from "@/lib/imaging/case-imaging-config";
 import { WINDOWING_PRESETS, WindowingPreset } from "@/lib/imaging/windowing-presets";
 import { getRadiologyReport, generatePlaceholderReport } from "@/lib/imaging/radiology-reports";
 
@@ -39,21 +40,65 @@ interface StudyInfo {
   accession: string;
 }
 
-// Body regions with their series
+// Body regions with their series - dynamically populated based on case
 const BODY_REGIONS = [
-  { id: "chest", name: "Chest", icon: "🫁", count: 168 },
-  { id: "abdomen", name: "Abdomen", icon: "🫃", count: 120 },
-  { id: "pelvis", name: "Pelvis", icon: "🦴", count: 80 },
-  { id: "brain", name: "Brain", icon: "🧠", count: 52 },
-  { id: "spine", name: "Spine", icon: "🦴", count: 95 },
+  { id: "chest", name: "Chest", icon: "🫁" },
+  { id: "abdomen", name: "Abdomen", icon: "🫃" },
+  { id: "pelvis", name: "Pelvis", icon: "🦴" },
+  { id: "brain", name: "Brain", icon: "🧠" },
+  { id: "head_neck", name: "Head/Neck", icon: "👤" },
 ];
 
-// Mock series for the current case
-const MOCK_SERIES: SeriesInfo[] = [
+// Map volume types to body regions
+const VOLUME_TYPE_TO_REGION: Record<VolumeType, string> = {
+  'ct_thorax': 'chest',
+  'ct_abdomen': 'abdomen',
+  'ct_pelvis': 'pelvis',
+  'mri_brain': 'brain',
+  'ct_head_neck': 'head_neck',
+};
+
+// Generate series based on case imaging config
+function generateSeriesForConfig(config: CaseImagingConfig): SeriesInfo[] {
+  const region = VOLUME_TYPE_TO_REGION[config.volumeType];
+  const { modality, bodyPart, seriesDescription } = config;
+  
+  const series: SeriesInfo[] = [
+    { 
+      id: `${modality.toLowerCase()}-${region}-axial`, 
+      name: `${modality} ${bodyPart} Axial`, 
+      description: seriesDescription, 
+      sliceCount: 100, 
+      bodyRegion: region, 
+      modality 
+    },
+  ];
+  
+  // Add modality-specific additional series
+  if (modality === 'CT') {
+    if (config.volumeType === 'ct_thorax') {
+      series.push(
+        { id: `ct-${region}-lung`, name: `CT ${bodyPart} Lung Window`, description: "Lung Algorithm", sliceCount: 100, bodyRegion: region, modality: "CT" },
+        { id: `ct-${region}-bone`, name: `CT ${bodyPart} Bone Window`, description: "Bone Algorithm", sliceCount: 100, bodyRegion: region, modality: "CT" },
+      );
+    } else if (config.volumeType === 'ct_abdomen' || config.volumeType === 'ct_pelvis') {
+      series.push(
+        { id: `ct-${region}-portal`, name: `CT ${bodyPart} Portal Venous`, description: "Portal Phase", sliceCount: 100, bodyRegion: region, modality: "CT" },
+      );
+    }
+  } else if (modality === 'MRI') {
+    series.push(
+      { id: `mri-${region}-t2`, name: `MRI ${bodyPart} T2 FLAIR`, description: "T2 Weighted", sliceCount: 100, bodyRegion: region, modality: "MRI" },
+      { id: `mri-${region}-dwi`, name: `MRI ${bodyPart} DWI`, description: "Diffusion Weighted", sliceCount: 100, bodyRegion: region, modality: "MRI" },
+    );
+  }
+  
+  return series;
+}
+
+// Default series (fallback)
+const DEFAULT_SERIES: SeriesInfo[] = [
   { id: "ct-chest-axial", name: "CT Chest Axial", description: "Contrast Enhanced", sliceCount: 100, bodyRegion: "chest", modality: "CT" },
-  { id: "ct-chest-lung", name: "CT Chest Lung Window", description: "Lung Algorithm", sliceCount: 100, bodyRegion: "chest", modality: "CT" },
-  { id: "ct-chest-bone", name: "CT Chest Bone Window", description: "Bone Algorithm", sliceCount: 100, bodyRegion: "chest", modality: "CT" },
-  { id: "pet-ct", name: "PET-CT Fusion", description: "FDG Uptake", sliceCount: 80, bodyRegion: "chest", modality: "PET" },
 ];
 
 interface ModernDicomViewerProps {
@@ -81,8 +126,10 @@ export function ModernDicomViewer({
   const [zoom, setZoom] = useState(1.0);
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
-  const [selectedSeries, setSelectedSeries] = useState(MOCK_SERIES[0]);
+  const [caseSeries, setCaseSeries] = useState<SeriesInfo[]>(DEFAULT_SERIES);
+  const [selectedSeries, setSelectedSeries] = useState<SeriesInfo>(DEFAULT_SERIES[0]);
   const [expandedRegions, setExpandedRegions] = useState<string[]>(["chest"]);
+  const [caseConfig, setCaseConfig] = useState<CaseImagingConfig | null>(null);
   const [showReport, setShowReport] = useState(true);
   const [activeTool, setActiveTool] = useState<string>("crosshair");
   
@@ -94,12 +141,12 @@ export function ModernDicomViewer({
     patientName,
     patientId: `MRN-${caseId.slice(0, 8).toUpperCase()}`,
     studyDate,
-    modality: "CT",
-    description: `${cancerType} - Staging CT`,
+    modality: caseConfig?.modality || "CT",
+    description: `${cancerType} - Staging ${caseConfig?.modality || "CT"}`,
     institution: "Virtual Tumor Board Demo",
     referringPhysician: "Dr. AI Specialist",
     accession: `ACC-${Date.now().toString(36).toUpperCase()}`,
-  }), [caseId, cancerType, patientName, studyDate]);
+  }), [caseId, cancerType, patientName, studyDate, caseConfig]);
 
   // Load report
   const report = useMemo(() => 
@@ -110,6 +157,20 @@ export function ModernDicomViewer({
   // Generate case-specific volume with tumor masks
   useEffect(() => {
     setIsLoading(true);
+    
+    // Get case config first
+    const config = getCaseImagingConfig(caseId) || getDefaultImagingConfig();
+    setCaseConfig(config);
+    
+    // Generate series for this case
+    const series = generateSeriesForConfig(config);
+    setCaseSeries(series);
+    setSelectedSeries(series[0]);
+    
+    // Expand the correct body region
+    const region = VOLUME_TYPE_TO_REGION[config.volumeType];
+    setExpandedRegions([region]);
+    
     setTimeout(() => {
       const caseVolume = generateCaseVolume(caseId, 256, 256, 100);
       setVolume(caseVolume);
@@ -193,53 +254,65 @@ export function ModernDicomViewer({
         
         {/* Series List */}
         <div className="flex-1 overflow-y-auto">
-          {BODY_REGIONS.map(region => (
-            <div key={region.id}>
-              {/* Region Header */}
-              <button
-                onClick={() => toggleRegion(region.id)}
-                className={`w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800/50 transition-colors ${
-                  expandedRegions.includes(region.id) ? "bg-slate-800/30" : ""
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">{region.icon}</span>
-                  <span className="text-sm font-medium text-slate-300">{region.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">{region.count}</span>
-                  {expandedRegions.includes(region.id) ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
-                  )}
-                </div>
-              </button>
-              
-              {/* Series under region */}
-              {expandedRegions.includes(region.id) && (
-                <div className="bg-slate-900/50">
-                  {MOCK_SERIES.filter(s => s.bodyRegion === region.id).map(series => (
-                    <button
-                      key={series.id}
-                      onClick={() => setSelectedSeries(series)}
-                      className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors ${
-                        selectedSeries.id === series.id
-                          ? "bg-blue-600/20 text-blue-400 border-l-2 border-blue-500"
-                          : "text-slate-400 hover:bg-slate-800/50 border-l-2 border-transparent"
-                      }`}
-                    >
-                      <div>
-                        <div className="text-sm font-medium">{series.name}</div>
-                        <div className="text-xs text-slate-500">{series.description}</div>
-                      </div>
-                      <span className="text-xs text-slate-500">{series.sliceCount}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {BODY_REGIONS.map(region => {
+            const regionSeries = caseSeries.filter(s => s.bodyRegion === region.id);
+            const seriesCount = regionSeries.reduce((sum, s) => sum + s.sliceCount, 0);
+            const hasSeries = regionSeries.length > 0;
+            
+            return (
+              <div key={region.id}>
+                {/* Region Header */}
+                <button
+                  onClick={() => toggleRegion(region.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800/50 transition-colors ${
+                    expandedRegions.includes(region.id) ? "bg-slate-800/30" : ""
+                  } ${!hasSeries ? "opacity-40" : ""}`}
+                  disabled={!hasSeries}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{region.icon}</span>
+                    <span className="text-sm font-medium text-slate-300">{region.name}</span>
+                    {hasSeries && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400">Active</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasSeries && <span className="text-xs text-slate-500">{seriesCount}</span>}
+                    {hasSeries && (
+                      expandedRegions.includes(region.id) ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                      )
+                    )}
+                  </div>
+                </button>
+                
+                {/* Series under region */}
+                {expandedRegions.includes(region.id) && hasSeries && (
+                  <div className="bg-slate-900/50">
+                    {regionSeries.map(series => (
+                      <button
+                        key={series.id}
+                        onClick={() => setSelectedSeries(series)}
+                        className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors ${
+                          selectedSeries.id === series.id
+                            ? "bg-blue-600/20 text-blue-400 border-l-2 border-blue-500"
+                            : "text-slate-400 hover:bg-slate-800/50 border-l-2 border-transparent"
+                        }`}
+                      >
+                        <div>
+                          <div className="text-sm font-medium">{series.name}</div>
+                          <div className="text-xs text-slate-500">{series.description}</div>
+                        </div>
+                        <span className="text-xs text-slate-500">{series.sliceCount}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -457,9 +530,9 @@ export function ModernDicomViewer({
 
               {/* Series List */}
               <div className="p-3">
-                <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Series ({MOCK_SERIES.length})</div>
+                <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Series ({caseSeries.length})</div>
                 <div className="space-y-1">
-                  {MOCK_SERIES.map(series => (
+                  {caseSeries.map(series => (
                     <button
                       key={series.id}
                       onClick={() => setSelectedSeries(series)}
