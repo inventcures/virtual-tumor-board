@@ -13,15 +13,9 @@
 import dicomParser from 'dicom-parser';
 
 // CDN Configuration
-// Primary: Cloudflare R2 (set NEXT_PUBLIC_R2_CDN_URL when public access enabled)
-// Fallback: GitHub Pages (always available)
-// 
-// To enable R2:
-// 1. Go to Cloudflare R2 Dashboard -> vtb-dicom bucket -> Settings
-// 2. Enable "Public access" 
-// 3. Copy the public URL (https://pub-xxx.r2.dev)
-// 4. Set NEXT_PUBLIC_R2_CDN_URL environment variable
-const R2_CDN_URL = process.env.NEXT_PUBLIC_R2_CDN_URL || null;
+// Primary: Cloudflare R2 (fastest, global edge network)
+// Fallback: GitHub Pages (reliable backup)
+const R2_CDN_URL = 'https://pub-5a6a698537c843faba7912e64a54a70f.r2.dev';
 const GITHUB_CDN_URL = 'https://inventcures.github.io/vtb-dicom';
 const LOCAL_URL = '/dicom'; // Fallback for local development
 
