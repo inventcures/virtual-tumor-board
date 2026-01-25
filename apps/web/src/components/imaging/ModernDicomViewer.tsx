@@ -10,9 +10,9 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   ZoomIn, ZoomOut, RotateCcw, Maximize2, Grid2X2,
   Sun, Contrast, Crosshair, Ruler, Circle, Square,
-  Download, Share2, Settings, Info, FileText
+  Download, Share2, Settings, Info, FileText, Target
 } from "lucide-react";
-import { generateSyntheticThorax, SyntheticVolume, getSliceDimensions } from "@/lib/imaging/synthetic-volume";
+import { generateCaseVolume, CaseVolume, getSliceDimensions } from "@/lib/imaging/case-volume-generator";
 import { WINDOWING_PRESETS, WindowingPreset } from "@/lib/imaging/windowing-presets";
 import { getRadiologyReport, generatePlaceholderReport } from "@/lib/imaging/radiology-reports";
 
@@ -70,7 +70,8 @@ export function ModernDicomViewer({
   studyDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }: ModernDicomViewerProps) {
   // State
-  const [volume, setVolume] = useState<SyntheticVolume | null>(null);
+  const [volume, setVolume] = useState<CaseVolume | null>(null);
+  const [showTumorOverlay, setShowTumorOverlay] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [currentSlice, setCurrentSlice] = useState(50);
   const [maxSlice, setMaxSlice] = useState(99);
@@ -106,14 +107,17 @@ export function ModernDicomViewer({
     [caseId, cancerType]
   );
 
-  // Generate synthetic volume
+  // Generate case-specific volume with tumor masks
   useEffect(() => {
     setIsLoading(true);
     setTimeout(() => {
-      const syntheticVolume = generateSyntheticThorax(256, 256, 100);
-      setVolume(syntheticVolume);
-      setMaxSlice(syntheticVolume.metadata.shape[0] - 1);
-      setCurrentSlice(Math.floor(syntheticVolume.metadata.shape[0] / 2));
+      const caseVolume = generateCaseVolume(caseId, 256, 256, 100);
+      setVolume(caseVolume);
+      setMaxSlice(caseVolume.metadata.shape[0] - 1);
+      setCurrentSlice(Math.floor(caseVolume.metadata.shape[0] / 2));
+      // Set default windowing based on modality
+      setWindowCenter(caseVolume.defaultWindow.center);
+      setWindowWidth(caseVolume.defaultWindow.width);
       setIsLoading(false);
     }, 100);
   }, [caseId]);
@@ -126,11 +130,11 @@ export function ModernDicomViewer({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const imageData = volume.getSliceAsImageData(currentAxis, currentSlice, windowCenter, windowWidth);
+    const imageData = volume.getSliceAsImageData(currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay);
     canvas.width = imageData.width;
     canvas.height = imageData.height;
     ctx.putImageData(imageData, 0, 0);
-  }, [volume, currentAxis, currentSlice, windowCenter, windowWidth]);
+  }, [volume, currentAxis, currentSlice, windowCenter, windowWidth, showTumorOverlay]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -291,6 +295,16 @@ export function ModernDicomViewer({
           {/* Right - View Options */}
           <div className="flex items-center gap-2">
             <button 
+              onClick={() => setShowTumorOverlay(!showTumorOverlay)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                showTumorOverlay ? "bg-red-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
+              }`}
+              title={showTumorOverlay ? "Hide tumor overlay" : "Show tumor overlay"}
+            >
+              <Target className="w-3.5 h-3.5" />
+              Tumor
+            </button>
+            <button 
               onClick={() => setShowReport(!showReport)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
                 showReport ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
@@ -345,6 +359,14 @@ export function ModernDicomViewer({
             <div className="absolute bottom-3 right-3 text-xs font-mono text-slate-500">
               <div>{zoom.toFixed(1)}x</div>
             </div>
+
+            {/* Tumor Overlay Legend */}
+            {showTumorOverlay && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 bg-black/70 rounded-full border border-slate-700">
+                <span className="w-3 h-3 rounded-full bg-red-500 border border-red-400"></span>
+                <span className="text-xs text-slate-300">Tumor/Lesion Contour</span>
+              </div>
+            )}
 
             {/* Side Scroll Indicators */}
             <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col gap-1">

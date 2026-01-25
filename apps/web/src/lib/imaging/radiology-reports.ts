@@ -352,6 +352,44 @@ export const RADIOLOGY_REPORTS: Record<string, RadiologistReport> = {
     reporter: "Dr. Chitran (AI Radiologist)",
     signedAt: "2026-01-25T19:00:00Z",
   },
+
+  // Case 10: Pediatric GBM - Brain MRI
+  "pediatric-gbm-brain": {
+    caseId: "pediatric-gbm-brain",
+    studyType: "MRI Brain with and without IV Contrast",
+    technique: "Multiplanar, multisequence MRI of the brain including T1, T2, FLAIR, DWI, ADC, SWI, and post-gadolinium T1-weighted sequences. 3D volumetric acquisition for surgical planning.",
+    comparison: "None available - new diagnosis",
+    findings: {
+      primaryLesion: "Large heterogeneous mass centered in the left frontoparietal region measuring 5.2 x 4.8 x 4.5 cm. The mass demonstrates peripheral irregular ring enhancement with central non-enhancing necrotic component. Marked surrounding T2/FLAIR hyperintense vasogenic edema extending into the left frontal and parietal white matter. The lesion exerts significant mass effect with 8mm rightward midline shift at the level of the septum pellucidum. Compression of the left lateral ventricle with early signs of obstructive hydrocephalus.",
+      lymphNodes: "Not applicable for CNS imaging.",
+      metastases: "No evidence of leptomeningeal enhancement to suggest CSF dissemination. No additional intraparenchymal lesions identified. Complete spine imaging recommended to rule out drop metastases.",
+      incidental: "No prior intracranial hemorrhage. Normal major intracranial vessels on MRA sequences. No dural venous sinus thrombosis.",
+    },
+    measurements: [
+      { label: "Tumor maximum diameter", value: "5.2 cm", slice: 55, location: "Left frontoparietal" },
+      { label: "Necrotic core", value: "2.8 x 2.5 cm", slice: 55, location: "Central tumor" },
+      { label: "Midline shift", value: "8 mm", slice: 50, location: "Septum pellucidum" },
+      { label: "Edema extent", value: "Extends 2cm beyond tumor", slice: 52, location: "Left hemisphere white matter" },
+      { label: "Enhancing rim thickness", value: "0.8-1.2 cm", slice: 55, location: "Tumor periphery" },
+    ],
+    impression: [
+      "Large left frontoparietal high-grade glioma with imaging features highly suggestive of glioblastoma (WHO Grade 4).",
+      "Ring enhancement with central necrosis - classic GBM appearance.",
+      "Significant mass effect with 8mm midline shift - concerning for impending herniation.",
+      "Extensive peritumoral edema consistent with aggressive biology.",
+      "No evidence of CSF dissemination on current study, though spinal MRI recommended.",
+    ],
+    recommendations: [
+      "Urgent neurosurgical consultation for mass effect management and surgical planning",
+      "Consider dexamethasone for cerebral edema reduction",
+      "MRI spine with contrast to complete neuroaxis staging",
+      "Perfusion MRI and MR spectroscopy for surgical planning if time permits",
+      "Pediatric neuro-oncology tumor board discussion",
+      "Neuropsychological baseline assessment pre-treatment",
+    ],
+    reporter: "Dr. Chitran (AI Neuroradiologist)",
+    signedAt: "2026-01-25T20:00:00Z",
+  },
 };
 
 /**
