@@ -50,6 +50,12 @@ importers:
       next:
         specifier: 15.5.9
         version: 15.5.9(@babel/core@7.28.6)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      nifti-reader-js:
+        specifier: ^0.8.0
+        version: 0.8.0
+      pako:
+        specifier: ^2.1.0
+        version: 2.1.0
       react:
         specifier: ^19.0.0
         version: 19.2.3
@@ -66,6 +72,9 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.7
+      '@types/pako':
+        specifier: ^2.0.4
+        version: 2.0.4
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.9
@@ -2407,6 +2416,9 @@ packages:
         optional: true
       sass:
         optional: true
+
+  nifti-reader-js@0.8.0:
+    resolution: {integrity: sha512-iO1iIhQDfKniy+l/86HfOPte7So+SxBmBiMSiUB2VXU7z4hSewMTlE3h0fCgfzfXvMUa+ilzLTJ2ZHmtFw6EWw==}
 
   node-domexception@1.0.0:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
@@ -5497,6 +5509,10 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
+
+  nifti-reader-js@0.8.0:
+    dependencies:
+      fflate: 0.8.2
 
   node-domexception@1.0.0: {}
 
