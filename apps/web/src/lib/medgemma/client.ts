@@ -255,7 +255,11 @@ export class MedGemmaClient {
 
   /**
    * Call HuggingFace Space running MedGemma 27B
-   * Uses Gradio API
+   * Uses Gradio async API (call + poll for result)
+   * 
+   * The warshanks/medgemma-27b-it space uses ZeroGPU which means:
+   * - Space sleeps when not in use (may take 20-60s to wake up)
+   * - Uses async pattern: POST to /call/chat, then GET result with event_id
    */
   private async callHFSpace(
     image: MedGemmaImageInput,
@@ -265,42 +269,128 @@ export class MedGemmaClient {
       ? `https://${this.config.spaceId.replace('/', '-')}.hf.space`
       : MEDGEMMA_SPACE_URL;
 
-    // Gradio API call
-    const response = await fetch(`${spaceUrl}/api/predict`, {
+    const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || this.config.apiKey;
+    
+    console.log(`[MedGemma] Calling HF Space: ${spaceUrl}`);
+
+    // Step 1: Initiate the async call
+    // The /chat endpoint expects: [message_with_files, system_prompt, max_tokens]
+    const initResponse = await fetch(`${spaceUrl}/gradio_api/call/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(this.config.apiKey ? { 'Authorization': `Bearer ${this.config.apiKey}` } : {}),
+        ...(hfToken ? { 'Authorization': `Bearer ${hfToken}` } : {}),
       },
       body: JSON.stringify({
         data: [
-          // Message with image
+          // Message with image (MultimodalData format)
           {
             text: prompt,
             files: [{
-              data: image.base64,
-              name: 'image.png',
-              is_file: false,
+              path: image.base64, // For base64, we use path field
+              url: image.base64,  // Some Gradio versions want url
+              orig_name: 'scan.png',
+              mime_type: image.mimeType,
+              meta: { _type: 'gradio.FileData' }
             }]
           },
           // System prompt
-          'You are an expert radiologist providing detailed medical image analysis.',
+          'You are an expert radiologist providing detailed medical image analysis. Provide structured findings with locations, measurements, and clinical significance.',
           // Max tokens
           2048
         ],
-        fn_index: 0,
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HF Space error: ${response.status} - ${errorText}`);
+    if (!initResponse.ok) {
+      const errorText = await initResponse.text();
+      // Check if space is sleeping
+      if (initResponse.status === 503 || errorText.includes('loading') || errorText.includes('sleeping')) {
+        throw new Error(`HF Space is sleeping/loading. Please try again in 30-60 seconds. Status: ${initResponse.status}`);
+      }
+      throw new Error(`HF Space init error: ${initResponse.status} - ${errorText}`);
     }
 
-    const data = await response.json();
-    // Gradio returns data in a specific format
-    const text = data.data?.[0]?.[0]?.[1] || data.data?.[0] || '';
-    return this.parseResponse(typeof text === 'string' ? text : JSON.stringify(text));
+    const initData = await initResponse.json();
+    const eventId = initData.event_id;
+    
+    if (!eventId) {
+      throw new Error('HF Space did not return event_id');
+    }
+
+    console.log(`[MedGemma] HF Space event_id: ${eventId}, polling for result...`);
+
+    // Step 2: Poll for result (SSE endpoint)
+    // The result comes as Server-Sent Events
+    const resultResponse = await fetch(`${spaceUrl}/gradio_api/call/chat/${eventId}`, {
+      method: 'GET',
+      headers: {
+        ...(hfToken ? { 'Authorization': `Bearer ${hfToken}` } : {}),
+      },
+    });
+
+    if (!resultResponse.ok) {
+      const errorText = await resultResponse.text();
+      throw new Error(`HF Space result error: ${resultResponse.status} - ${errorText}`);
+    }
+
+    // Parse SSE response
+    const resultText = await resultResponse.text();
+    console.log(`[MedGemma] HF Space raw response length: ${resultText.length}`);
+    
+    // SSE format: "event: complete\ndata: [result]\n\n" or "event: error\ndata: null\n\n"
+    const lines = resultText.split('\n');
+    let eventType = '';
+    let data = '';
+    
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        eventType = line.slice(7).trim();
+      } else if (line.startsWith('data: ')) {
+        data = line.slice(6).trim();
+      }
+    }
+
+    if (eventType === 'error' || !data || data === 'null') {
+      // Space might be warming up or GPU quota exceeded
+      throw new Error(`HF Space returned error or empty result. Event: ${eventType}. The space may be warming up (ZeroGPU) - try again in 30s.`);
+    }
+
+    // Parse the JSON result
+    let parsedData;
+    try {
+      parsedData = JSON.parse(data);
+    } catch (e) {
+      throw new Error(`Failed to parse HF Space response: ${data.substring(0, 200)}`);
+    }
+
+    // Extract the generated text from the response
+    // Format varies but typically: [{"role": "assistant", "content": "..."}] or just the text
+    let generatedText = '';
+    if (Array.isArray(parsedData)) {
+      // Could be array of messages or array with single result
+      const lastItem = parsedData[parsedData.length - 1];
+      if (typeof lastItem === 'string') {
+        generatedText = lastItem;
+      } else if (lastItem?.content) {
+        generatedText = lastItem.content;
+      } else if (lastItem?.[1]) {
+        // Chat format: [[user, assistant], ...]
+        generatedText = lastItem[1];
+      }
+    } else if (typeof parsedData === 'string') {
+      generatedText = parsedData;
+    } else if (parsedData?.content) {
+      generatedText = parsedData.content;
+    }
+
+    if (!generatedText) {
+      console.warn('[MedGemma] Could not extract text from HF response:', JSON.stringify(parsedData).substring(0, 500));
+      throw new Error('Could not extract generated text from HF Space response');
+    }
+
+    console.log(`[MedGemma] HF Space generated ${generatedText.length} chars`);
+    return this.parseResponse(generatedText);
   }
 
   private buildPrompt(metadata: MedGemmaImageInput['metadata'], context: AnalysisContext): string {
