@@ -379,7 +379,7 @@ export default function DocumentUploadPage() {
     ));
   }, []);
 
-  // Handle continue - OPTIMIZED with streaming progress
+  // Handle continue - OPTIMIZED with real Gemini OCR/classification API
   const handleContinue = useCallback(async () => {
     if (!session || documents.length === 0) return;
 
@@ -421,7 +421,6 @@ export default function DocumentUploadPage() {
           subStage: `Loading ${formatFileSize(doc.fileSize)} file...`,
           pipelineProgress: 10,
         }));
-        await new Promise(r => setTimeout(r, 50));
 
         let fileToProcess = doc.file;
 
@@ -433,59 +432,106 @@ export default function DocumentUploadPage() {
             subStage: 'Resizing image for optimal processing...',
             pipelineProgress: 20,
           }));
-          await new Promise(r => setTimeout(r, 30));
-          fileToProcess = await compressImageIfNeeded(doc.file, 400);
+          fileToProcess = await compressImageIfNeeded(doc.file, 500);
           
           setProcessingStatus(prev => ({ 
             ...prev, 
             subStage: `Compressed: ${formatFileSize(doc.fileSize)} → ${formatFileSize(fileToProcess.size)}`,
-            pipelineProgress: 30,
+            pipelineProgress: 25,
           }));
-          await new Promise(r => setTimeout(r, 50));
         }
 
-        // === STAGE 3: OCR (simulated for now) ===
+        // Read file as base64
+        const base64 = await fileToBase64WithProgress(
+          fileToProcess,
+          (loaded, total) => {
+            setProcessingStatus(prev => ({
+              ...prev,
+              bytesProcessed: bytesProcessed + loaded,
+              pipelineProgress: 25 + (loaded / total) * 15, // 25-40%
+            }));
+          }
+        );
+
+        // === STAGE 3-5: Call API for OCR, Classification, Extraction ===
         setProcessingStatus(prev => ({ 
           ...prev, 
           stage: 'ocr',
-          subStage: isPDF ? 'Extracting text from PDF...' : 'Running OCR on image...',
+          subStage: isPDF ? 'Extracting text with Gemini Flash...' : 'Running Gemini Vision OCR...',
           pipelineProgress: 40,
         }));
-        await new Promise(r => setTimeout(r, isImage ? 100 : 50)); // OCR takes longer on images
 
-        setProcessingStatus(prev => ({ 
-          ...prev, 
-          subStage: 'Text extraction complete',
-          pipelineProgress: 50,
-        }));
-        await new Promise(r => setTimeout(r, 30));
+        let classifiedType = doc.classifiedType;
+        let classificationConfidence = 0.8;
+        let extractedData = undefined;
 
-        // === STAGE 4: AI Classification ===
-        setProcessingStatus(prev => ({ 
-          ...prev, 
-          stage: 'classifying',
-          subStage: 'AI analyzing document type...',
-          pipelineProgress: 60,
-        }));
-        await new Promise(r => setTimeout(r, 80));
+        try {
+          // Call the real OCR/classification API
+          const response = await fetch('/api/upload/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileBase64: base64,
+              mimeType: fileToProcess.type || doc.mimeType,
+              filename: doc.filename,
+              // Only send override if user manually changed the type
+              documentTypeOverride: !doc.autoDetected ? doc.classifiedType : undefined,
+            }),
+            signal: abortControllerRef.current?.signal,
+          });
 
-        // Show what was classified
-        const docTypeLabel = DOCUMENT_TYPE_LABELS[doc.classifiedType]?.en || 'Unknown';
-        setProcessingStatus(prev => ({ 
-          ...prev, 
-          subStage: `Detected: ${docTypeLabel}`,
-          pipelineProgress: 70,
-        }));
-        await new Promise(r => setTimeout(r, 50));
+          if (response.ok) {
+            const result = await response.json();
+            
+            // Update classification stage
+            setProcessingStatus(prev => ({ 
+              ...prev, 
+              stage: 'classifying',
+              subStage: `AI detected: ${DOCUMENT_TYPE_LABELS[result.classifiedType as DocumentType]?.en || result.classifiedType}`,
+              pipelineProgress: 60,
+            }));
+            await new Promise(r => setTimeout(r, 200));
 
-        // === STAGE 5: Data Extraction ===
-        setProcessingStatus(prev => ({ 
-          ...prev, 
-          stage: 'extracting',
-          subStage: 'Finding clinical information...',
-          pipelineProgress: 80,
-        }));
-        await new Promise(r => setTimeout(r, 60));
+            classifiedType = result.classifiedType;
+            classificationConfidence = result.confidence;
+            extractedData = result.extractedData;
+
+            // Show extraction stage
+            setProcessingStatus(prev => ({ 
+              ...prev, 
+              stage: 'extracting',
+              subStage: result.extractedData?.histology 
+                ? `Found: ${result.extractedData.histology.slice(0, 40)}...`
+                : result.extractedData?.findings?.length 
+                ? `Found ${result.extractedData.findings.length} findings`
+                : 'Clinical data extracted',
+              pipelineProgress: 80,
+            }));
+            await new Promise(r => setTimeout(r, 150));
+
+            // Show any warnings
+            if (result.warnings?.length > 0) {
+              setProcessingStatus(prev => ({ 
+                ...prev, 
+                subStage: `⚠️ ${result.warnings[0]}`,
+              }));
+              await new Promise(r => setTimeout(r, 300));
+            }
+          } else {
+            // API failed, fall back to fast classification
+            console.warn(`API failed for ${doc.filename}, using fallback classification`);
+            setProcessingStatus(prev => ({ 
+              ...prev, 
+              stage: 'classifying',
+              subStage: `Fallback: ${DOCUMENT_TYPE_LABELS[doc.classifiedType]?.en || 'Unknown'}`,
+              pipelineProgress: 70,
+            }));
+          }
+        } catch (apiError: any) {
+          if (apiError.name === 'AbortError') throw new Error('Cancelled');
+          console.warn(`API error for ${doc.filename}:`, apiError);
+          // Continue with fallback classification
+        }
 
         // === STAGE 6: Validation ===
         setProcessingStatus(prev => ({ 
@@ -494,30 +540,20 @@ export default function DocumentUploadPage() {
           subStage: 'Checking document quality...',
           pipelineProgress: 90,
         }));
-        await new Promise(r => setTimeout(r, 40));
-
-        // Read file with progress
-        const base64 = await fileToBase64WithProgress(
-          fileToProcess,
-          (loaded, total) => {
-            setProcessingStatus(prev => ({
-              ...prev,
-              bytesProcessed: bytesProcessed + loaded,
-            }));
-          }
-        );
+        await new Promise(r => setTimeout(r, 100));
 
         bytesProcessed += doc.fileSize;
 
         processedDocs.push({
           id: doc.id,
           filename: doc.filename,
-          mimeType: doc.mimeType,
+          mimeType: fileToProcess.type || doc.mimeType,
           fileSize: fileToProcess.size,
           base64Data: base64,
-          classifiedType: doc.classifiedType,
-          classificationConfidence: 0.8,
+          classifiedType: classifiedType,
+          classificationConfidence: classificationConfidence,
           autoDetected: doc.autoDetected,
+          extractedData: extractedData,
           status: 'done',
         });
 
@@ -527,7 +563,7 @@ export default function DocumentUploadPage() {
           pipelineProgress: 100,
           bytesProcessed,
         }));
-        await new Promise(r => setTimeout(r, 30));
+        await new Promise(r => setTimeout(r, 100));
       }
 
       // Save to localStorage
@@ -554,11 +590,12 @@ export default function DocumentUploadPage() {
       }));
 
       // Quick transition
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 300));
       router.push("/upload/review");
 
     } catch (error: any) {
       if (error.message !== 'Cancelled') {
+        console.error('Document processing error:', error);
         setProcessingStatus(prev => ({
           ...prev,
           isProcessing: false,

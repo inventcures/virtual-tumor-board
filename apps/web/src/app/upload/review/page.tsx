@@ -236,9 +236,8 @@ export default function ReviewPage() {
 
     localStorage.setItem("vtb_upload_session", JSON.stringify(updatedSession));
 
-    // For now, redirect to a placeholder deliberation page
-    // In the full implementation, this would start the actual tumor board
-    router.push("/?userCase=true");
+    // Navigate to user case deliberation page
+    router.push("/deliberate");
   };
 
   const cancerSite = session ? getCancerSiteById(session.cancerSite) : null;
