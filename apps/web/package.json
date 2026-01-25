@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3333",
+    "prebuild": "python3 ../../scripts/download_real_images.py || echo 'Image generation skipped'",
     "build": "next build",
     "start": "next start -p ${PORT:-3333}",
     "lint": "next lint"
