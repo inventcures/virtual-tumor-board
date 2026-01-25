@@ -342,10 +342,16 @@ export class OncoSegClient {
     }
 
     try {
-      const parsed = JSON.parse(data);
+      let parsed = JSON.parse(data);
       
       // Handle Gradio response format (array or object)
-      const result = Array.isArray(parsed) ? parsed[0] : parsed;
+      let result = Array.isArray(parsed) ? parsed[0] : parsed;
+      
+      // Handle case where the API returns a JSON string (for Gradio compatibility)
+      // This happens when the server returns `-> str` instead of `-> Dict`
+      if (typeof result === 'string') {
+        result = JSON.parse(result);
+      }
 
       return {
         success: result.success ?? true,
@@ -397,8 +403,13 @@ export class OncoSegClient {
     }
 
     try {
-      const parsed = JSON.parse(data);
-      const result = Array.isArray(parsed) ? parsed[0] : parsed;
+      let parsed = JSON.parse(data);
+      let result = Array.isArray(parsed) ? parsed[0] : parsed;
+      
+      // Handle case where the API returns a JSON string (for Gradio compatibility)
+      if (typeof result === 'string') {
+        result = JSON.parse(result);
+      }
 
       // Convert contours format
       const contours: Record<string, Contour[]> = {};
