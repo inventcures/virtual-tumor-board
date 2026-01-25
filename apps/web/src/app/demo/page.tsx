@@ -7,7 +7,6 @@ import { ImagingReviewTab } from "@/components/ImagingReviewTab";
 import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { SAMPLE_CASES, SampleCase, CASE_SUMMARY } from "@/lib/sample-cases";
-import { MyImagingTab } from "@/components/my-imaging";
 
 // Convert SampleCase to the format expected by CaseSummary
 function convertToCaseData(sampleCase: SampleCase) {
@@ -316,9 +315,26 @@ export default function Home() {
             )}
 
             {activeTab === "my-imaging" && (
-              <MyImagingTab 
-                caseId={currentCase.id}
-              />
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 rounded-xl border border-slate-700 p-8 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-4">
+                  <ScanLine className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">Upload Your Own Scans</h3>
+                <p className="text-slate-400 mb-6 max-w-md mx-auto">
+                  Our new upload flow lets you upload your DICOM files, phone photos, or gallery images 
+                  for AI-powered analysis by MedGemma.
+                </p>
+                <Link
+                  href="/upload"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-indigo-500/25 transition-all"
+                >
+                  <Upload className="w-5 h-5" />
+                  Start Upload Flow
+                </Link>
+                <p className="text-xs text-slate-500 mt-4">
+                  Upload documents + imaging together for the best tumor board experience
+                </p>
+              </div>
             )}
           </>
         ) : (

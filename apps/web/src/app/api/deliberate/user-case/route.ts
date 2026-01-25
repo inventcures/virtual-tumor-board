@@ -3,6 +3,8 @@
  * 
  * Handles tumor board deliberation for user-uploaded cancer records
  * with appropriate data limitation caveats
+ * 
+ * V6: Now includes MedGemma imaging analysis for Dr. Chitran
  */
 
 import { NextRequest } from "next/server";
@@ -11,9 +13,16 @@ import type {
   UploadSession, 
   DocumentType, 
   MissingDocument,
-  ExtractedClinicalData 
+  ExtractedClinicalData,
+  UploadSessionV6,
+  UploadedImagingStudy
 } from "@/types/user-upload";
 import { DOCUMENT_TYPE_LABELS, getCancerSiteById } from "@/lib/upload/constants";
+import { 
+  buildImagingContextForChitran, 
+  DR_CHITRAN_IMAGING_PROMPT_ADDITION,
+  getImagingSummaryForOtherAgents
+} from "@/lib/medgemma/dr-chitran-integration";
 
 export const runtime = "edge";
 
@@ -276,7 +285,7 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { session } = body as { session: UploadSession };
+    const { session } = body as { session: UploadSessionV6 };
     
     if (!session || !session.documents?.length) {
       return new Response(
@@ -301,6 +310,25 @@ export async function POST(request: NextRequest) {
     const uploadedTypes = [...new Set(session.documents.map(d => d.classifiedType))];
     const missingDocs = session.completeness?.missingCritical || [];
     
+    // V6: Build imaging context for Dr. Chitran
+    const imagingStudies = session.imagingStudies || [];
+    const hasImagingStudies = imagingStudies.length > 0;
+    const completedAnalyses = imagingStudies.filter(s => s.status === 'complete' && s.medgemmaAnalysis);
+    
+    // Build imaging context from completed MedGemma analyses
+    const imagingContext = hasImagingStudies ? buildImagingContextForChitran({
+      hasUploadedImages: true,
+      medgemmaAnalysis: completedAnalyses[0]?.medgemmaAnalysis,
+      // Extract radiology reports from documents if available
+      uploadedReports: session.extractedRadiologyReports,
+    }) : '';
+    
+    // Summary for other agents (non-Chitran)
+    const imagingSummaryForOthers = hasImagingStudies ? getImagingSummaryForOtherAgents({
+      medgemmaAnalysis: completedAnalyses[0]?.medgemmaAnalysis,
+      uploadedReports: session.extractedRadiologyReports,
+    }) : '';
+    
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -312,6 +340,10 @@ export async function POST(request: NextRequest) {
             cancerSite: session.cancerSite,
             documentCount: session.documents.length,
             completenessScore: session.completeness?.completenessScore || 0,
+            // V6: Include imaging status
+            hasImaging: hasImagingStudies,
+            imagingStudyCount: imagingStudies.length,
+            imagingAnalysisCount: completedAnalyses.length,
           });
           controller.enqueue(encoder.encode(`data: ${caseInfo}\n\n`));
 
@@ -333,8 +365,12 @@ export async function POST(request: NextRequest) {
             // Get caveat for this agent
             const caveat = getAgentCaveat(agent, uploadedTypes, missingDocs);
             
+            // V6: Check if this is Dr. Chitran (radiologist) and we have imaging
+            const isDrChitran = agent.id === 'radiologist';
+            const hasImagingForChitran = isDrChitran && hasImagingStudies;
+            
             // Build system prompt with user case additions
-            const systemPrompt = `You are ${agent.name}, a ${agent.specialty} specialist on a virtual tumor board.
+            let systemPrompt = `You are ${agent.name}, a ${agent.specialty} specialist on a virtual tumor board.
 
 IMPORTANT: Provide a COMPREHENSIVE, DETAILED response (at least 500-800 words). Structure your response with clear sections:
 1. Data Limitations (if any)
@@ -348,7 +384,24 @@ Be evidence-based and cite NCCN, ESMO, or other relevant guidelines where applic
 Consider Indian healthcare context including drug availability and cost.
 ${getUserCaseSystemPromptAddition(uploadedTypes, missingDocs, session.userType)}`;
 
+            // V6: Add enhanced imaging prompt for Dr. Chitran when images are available
+            if (hasImagingForChitran) {
+              systemPrompt += '\n\n' + DR_CHITRAN_IMAGING_PROMPT_ADDITION;
+            }
+
+            // Build user prompt with appropriate imaging context
+            let agentImagingContext = '';
+            if (hasImagingForChitran) {
+              // Full imaging context for Dr. Chitran
+              agentImagingContext = imagingContext;
+            } else if (hasImagingStudies && !isDrChitran) {
+              // Summary imaging context for other agents
+              agentImagingContext = imagingSummaryForOthers;
+            }
+
             const userPrompt = `${caseContext}
+
+${agentImagingContext}
 
 ---
 

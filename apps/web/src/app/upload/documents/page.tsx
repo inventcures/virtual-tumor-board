@@ -16,9 +16,19 @@ import {
   FileText,
   Image as ImageIcon,
   Zap,
-  Smartphone
+  Smartphone,
+  Disc,
+  Scan,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
-import type { UploadSession, UploadedDocument, DocumentType } from "@/types/user-upload";
+import type { UploadSession, UploadedDocument, DocumentType, UploadedImagingStudy, UploadSessionV6 } from "@/types/user-upload";
+import type { ImagingStudy, MedGemmaResponse, CapturedImage } from "@/types/imaging";
+import { ImagingUploadPanel } from "@/components/my-imaging/ImagingUploadPanel";
+import { DicomUploader } from "@/components/my-imaging/DicomUploader";
+import { CameraCapture } from "@/components/my-imaging/CameraCapture";
+import { GalleryUpload } from "@/components/my-imaging/GalleryUpload";
+import { MedGemmaPanel } from "@/components/my-imaging/MedGemmaPanel";
 import { 
   UPLOAD_LIMITS, 
   formatFileSize, 
@@ -250,6 +260,9 @@ async function saveToLocalStorageChunked(key: string, data: string): Promise<voi
 // COMPONENT
 // =============================================================================
 
+// Imaging upload method type
+type ImagingUploadMethod = 'select' | 'dicom' | 'camera' | 'gallery';
+
 export default function DocumentUploadPage() {
   const router = useRouter();
   const [session, setSession] = useState<UploadSession | null>(null);
@@ -266,6 +279,16 @@ export default function DocumentUploadPage() {
     totalBytes: 0,
     pipelineProgress: 0,
   });
+  
+  // =============================================================================
+  // V6: IMAGING UPLOAD STATE
+  // =============================================================================
+  const [showImagingSection, setShowImagingSection] = useState(false);
+  const [imagingUploadMethod, setImagingUploadMethod] = useState<ImagingUploadMethod>('select');
+  const [imagingStudies, setImagingStudies] = useState<UploadedImagingStudy[]>([]);
+  const [isAnalyzingImaging, setIsAnalyzingImaging] = useState(false);
+  const [imagingConsentAccepted, setImagingConsentAccepted] = useState(false);
+  const [showImagingConsent, setShowImagingConsent] = useState(true);
   
   // Refs for performance
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -285,7 +308,7 @@ export default function DocumentUploadPage() {
     }
     
     try {
-      const parsed: UploadSession = JSON.parse(stored);
+      const parsed = JSON.parse(stored) as UploadSessionV6;
       if (!parsed.cancerSite) {
         router.push("/upload/cancer-info");
         return;
@@ -308,6 +331,13 @@ export default function DocumentUploadPage() {
         }));
         setDocuments(lazyDocs);
         setTotalSize(parsed.documents.reduce((sum, d) => sum + d.fileSize, 0));
+      }
+      
+      // V6: Load imaging studies if available
+      if (parsed.imagingStudies?.length) {
+        setImagingStudies(parsed.imagingStudies);
+        setImagingConsentAccepted(parsed.imagingConsentAccepted || false);
+        setShowImagingConsent(!parsed.imagingConsentAccepted);
       }
     } catch (e) {
       router.push("/upload");
@@ -377,6 +407,140 @@ export default function DocumentUploadPage() {
     setDocuments(prev => prev.map(doc => 
       doc.id === id ? { ...doc, classifiedType: newType, autoDetected: false } : doc
     ));
+  }, []);
+
+  // =============================================================================
+  // V6: IMAGING UPLOAD HANDLERS
+  // =============================================================================
+
+  // Analyze uploaded image with MedGemma
+  const analyzeWithMedGemma = useCallback(async (imageData: string, study: ImagingStudy): Promise<MedGemmaResponse | null> => {
+    setIsAnalyzingImaging(true);
+    
+    try {
+      const response = await fetch('/api/imaging/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageData,
+          modality: study.modality,
+          bodyPart: study.bodyPart,
+          source: study.source,
+          analysisType: 'oncology',
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Analysis failed');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('MedGemma analysis error:', error);
+      return null;
+    } finally {
+      setIsAnalyzingImaging(false);
+    }
+  }, []);
+
+  // Handle DICOM upload
+  const handleDicomUpload = useCallback(async (study: ImagingStudy, imageData: string) => {
+    const uploadedStudy: UploadedImagingStudy = {
+      study,
+      uploadedAt: new Date().toISOString(),
+      status: 'analyzing',
+    };
+    
+    setImagingStudies(prev => [...prev, uploadedStudy]);
+    setImagingUploadMethod('select');
+    
+    // Trigger MedGemma analysis
+    const analysis = await analyzeWithMedGemma(imageData, study);
+    
+    setImagingStudies(prev => prev.map(s => 
+      s.study.id === study.id 
+        ? { ...s, medgemmaAnalysis: analysis || undefined, status: analysis ? 'complete' : 'error' }
+        : s
+    ));
+  }, [analyzeWithMedGemma]);
+
+  // Handle camera capture
+  const handleCameraCapture = useCallback(async (captured: CapturedImage) => {
+    const study: ImagingStudy = {
+      id: `study-${Date.now()}`,
+      sessionId: `session-${Date.now()}`,
+      studyDate: captured.timestamp,
+      uploadDate: new Date(),
+      modality: 'CR',
+      bodyPart: 'Unknown',
+      description: 'Phone Camera Capture',
+      sliceCount: 1,
+      source: 'photo',
+      measurements: [],
+      isBaseline: imagingStudies.length === 0,
+      timepoint: imagingStudies.length === 0 ? 'baseline' : 'follow-up',
+      thumbnailDataUrl: captured.dataUrl,
+    };
+    
+    const uploadedStudy: UploadedImagingStudy = {
+      study,
+      uploadedAt: new Date().toISOString(),
+      status: 'analyzing',
+    };
+    
+    setImagingStudies(prev => [...prev, uploadedStudy]);
+    setImagingUploadMethod('select');
+    
+    // Trigger MedGemma analysis
+    const analysis = await analyzeWithMedGemma(captured.dataUrl, study);
+    
+    setImagingStudies(prev => prev.map(s => 
+      s.study.id === study.id 
+        ? { ...s, medgemmaAnalysis: analysis || undefined, status: analysis ? 'complete' : 'error' }
+        : s
+    ));
+  }, [analyzeWithMedGemma, imagingStudies.length]);
+
+  // Handle gallery upload
+  const handleGalleryUpload = useCallback(async (imageDataUrl: string, file: File) => {
+    const study: ImagingStudy = {
+      id: `study-${Date.now()}`,
+      sessionId: `session-${Date.now()}`,
+      studyDate: new Date(),
+      uploadDate: new Date(),
+      modality: 'OT',
+      bodyPart: 'Unknown',
+      description: file.name,
+      sliceCount: 1,
+      source: 'gallery',
+      measurements: [],
+      isBaseline: imagingStudies.length === 0,
+      timepoint: imagingStudies.length === 0 ? 'baseline' : 'follow-up',
+      thumbnailDataUrl: imageDataUrl,
+    };
+    
+    const uploadedStudy: UploadedImagingStudy = {
+      study,
+      uploadedAt: new Date().toISOString(),
+      status: 'analyzing',
+    };
+    
+    setImagingStudies(prev => [...prev, uploadedStudy]);
+    setImagingUploadMethod('select');
+    
+    // Trigger MedGemma analysis
+    const analysis = await analyzeWithMedGemma(imageDataUrl, study);
+    
+    setImagingStudies(prev => prev.map(s => 
+      s.study.id === study.id 
+        ? { ...s, medgemmaAnalysis: analysis || undefined, status: analysis ? 'complete' : 'error' }
+        : s
+    ));
+  }, [analyzeWithMedGemma, imagingStudies.length]);
+
+  // Remove imaging study
+  const removeImagingStudy = useCallback((studyId: string) => {
+    setImagingStudies(prev => prev.filter(s => s.study.id !== studyId));
   }, []);
 
   // Handle continue - OPTIMIZED with real Gemini OCR/classification API
@@ -573,9 +737,23 @@ export default function DocumentUploadPage() {
         currentFileName: 'Saving session...',
       }));
 
-      const updatedSession: UploadSession = {
+      // V6: Prepare imaging studies for storage (remove thumbnailDataUrl to save space)
+      const imagingStudiesForStorage: UploadedImagingStudy[] = imagingStudies.map(s => ({
+        ...s,
+        study: {
+          ...s.study,
+          thumbnailDataUrl: undefined, // Don't store in localStorage
+        },
+      }));
+
+      const updatedSession: UploadSessionV6 = {
         ...session,
         documents: processedDocs,
+        // V6: Include imaging data
+        imagingStudies: imagingStudiesForStorage,
+        hasUserUploadedImaging: imagingStudies.length > 0,
+        imagingConsentAccepted: imagingConsentAccepted,
+        isAutoStaged: (session as any).isAutoStaged || false,
       };
 
       try {
@@ -850,6 +1028,207 @@ export default function DocumentUploadPage() {
               </div>
             </div>
           )}
+
+          {/* =============================================================================
+              V6: MEDICAL IMAGING SECTION (DICOM/Camera/Gallery + MedGemma AI)
+              ============================================================================= */}
+          <div className="border-t border-slate-700/50 pt-4 sm:pt-6">
+            <button
+              onClick={() => setShowImagingSection(!showImagingSection)}
+              className="w-full flex items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-cyan-900/30 to-indigo-900/30 rounded-xl border border-cyan-700/30 hover:border-cyan-600/50 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-cyan-600/20 flex items-center justify-center">
+                  <Scan className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
+                    Medical Imaging (CT/MRI/X-ray)
+                    {imagingStudies.length > 0 && (
+                      <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full">
+                        {imagingStudies.length} scan{imagingStudies.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Upload DICOM files or photos of scans for AI analysis
+                  </p>
+                </div>
+              </div>
+              {showImagingSection ? (
+                <ChevronUp className="w-5 h-5 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-slate-400" />
+              )}
+            </button>
+
+            {/* Imaging Section Content */}
+            {showImagingSection && (
+              <div className="mt-4 space-y-4">
+                {/* Consent Dialog */}
+                {showImagingConsent && !imagingConsentAccepted && (
+                  <div className="bg-amber-900/20 border border-amber-500/30 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-amber-400 mb-2">Important Disclaimer</h4>
+                        <ul className="text-xs text-slate-300 space-y-1.5">
+                          <li>AI analysis is for <strong className="text-white">educational purposes only</strong></li>
+                          <li>Not a substitute for professional radiologist interpretation</li>
+                          <li>Images processed by MedGemma AI, auto-deleted after 7 days</li>
+                          <li>AI may miss findings or make errors</li>
+                        </ul>
+                        <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={imagingConsentAccepted}
+                            onChange={(e) => {
+                              setImagingConsentAccepted(e.target.checked);
+                              if (e.target.checked) setShowImagingConsent(false);
+                            }}
+                            className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-cyan-500"
+                          />
+                          <span className="text-sm text-white">I understand and agree</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Imaging Upload Methods */}
+                {imagingConsentAccepted && (
+                  <>
+                    {imagingUploadMethod === 'select' && (
+                      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                        <button
+                          onClick={() => setImagingUploadMethod('dicom')}
+                          className="flex flex-col items-center gap-2 p-3 sm:p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-cyan-500/50 transition-colors"
+                        >
+                          <Disc className="w-6 h-6 text-cyan-400" />
+                          <span className="text-xs text-slate-300">DICOM</span>
+                        </button>
+                        <button
+                          onClick={() => setImagingUploadMethod('camera')}
+                          className="flex flex-col items-center gap-2 p-3 sm:p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-cyan-500/50 transition-colors"
+                        >
+                          <Camera className="w-6 h-6 text-cyan-400" />
+                          <span className="text-xs text-slate-300">Camera</span>
+                        </button>
+                        <button
+                          onClick={() => setImagingUploadMethod('gallery')}
+                          className="flex flex-col items-center gap-2 p-3 sm:p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-cyan-500/50 transition-colors"
+                        >
+                          <ImageIcon className="w-6 h-6 text-cyan-400" />
+                          <span className="text-xs text-slate-300">Gallery</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {imagingUploadMethod === 'dicom' && (
+                      <DicomUploader
+                        onUpload={handleDicomUpload}
+                        onCancel={() => setImagingUploadMethod('select')}
+                      />
+                    )}
+
+                    {imagingUploadMethod === 'camera' && (
+                      <CameraCapture
+                        onCapture={handleCameraCapture}
+                        onCancel={() => setImagingUploadMethod('select')}
+                        imageType="xray"
+                      />
+                    )}
+
+                    {imagingUploadMethod === 'gallery' && (
+                      <GalleryUpload
+                        onUpload={handleGalleryUpload}
+                        onCancel={() => setImagingUploadMethod('select')}
+                      />
+                    )}
+                  </>
+                )}
+
+                {/* Uploaded Imaging Studies List */}
+                {imagingStudies.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-white">Uploaded Scans</h4>
+                    {imagingStudies.map((item) => (
+                      <div
+                        key={item.study.id}
+                        className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl border border-slate-700/50"
+                      >
+                        {/* Thumbnail */}
+                        <div className="w-12 h-12 rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {item.study.thumbnailDataUrl ? (
+                            <img
+                              src={item.study.thumbnailDataUrl}
+                              alt={item.study.description}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Scan className="w-6 h-6 text-slate-500" />
+                          )}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">
+                            {item.study.description || item.study.modality}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {item.study.source === 'dicom' ? 'DICOM' : 
+                             item.study.source === 'photo' ? 'Camera' : 'Gallery'}
+                            {' '}|{' '}
+                            {item.status === 'analyzing' && 'Analyzing...'}
+                            {item.status === 'complete' && 'AI Analysis Complete'}
+                            {item.status === 'error' && 'Analysis Failed'}
+                            {item.status === 'pending' && 'Pending'}
+                          </p>
+                        </div>
+
+                        {/* Status Icon */}
+                        {item.status === 'analyzing' && (
+                          <Loader2 className="w-5 h-5 text-cyan-400 animate-spin flex-shrink-0" />
+                        )}
+                        {item.status === 'complete' && (
+                          <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                        )}
+                        {item.status === 'error' && (
+                          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                        )}
+
+                        {/* Remove Button */}
+                        <button
+                          onClick={() => removeImagingStudy(item.study.id)}
+                          className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                          <X className="w-4 h-4 text-slate-500" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* MedGemma Analysis Preview */}
+                    {imagingStudies.some(s => s.medgemmaAnalysis) && (
+                      <div className="mt-3 p-3 bg-cyan-900/20 rounded-xl border border-cyan-700/30">
+                        <h5 className="text-xs font-medium text-cyan-400 mb-2">AI Analysis Summary</h5>
+                        {imagingStudies.filter(s => s.medgemmaAnalysis).map(s => (
+                          <div key={s.study.id} className="text-xs text-slate-300">
+                            <p className="font-medium text-white">{s.study.description}:</p>
+                            <p className="text-slate-400 line-clamp-2">
+                              {s.medgemmaAnalysis?.impression || s.medgemmaAnalysis?.interpretation}
+                            </p>
+                          </div>
+                        ))}
+                        <p className="text-[10px] text-slate-500 mt-2">
+                          Full analysis will be reviewed by Dr. Chitran (AI Radiologist)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 

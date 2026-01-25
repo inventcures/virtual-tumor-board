@@ -340,3 +340,39 @@ export interface UploadSessionV5 extends UploadSession {
   timeline?: TreatmentTimeline;
   isAutoStaged: boolean;
 }
+
+// =============================================================================
+// V6: IMAGING INTEGRATION (MedGemma + DICOM/Phone uploads)
+// =============================================================================
+
+// Import imaging types for session integration
+import type { ImagingStudy, MedGemmaResponse, ExtractedRadiologyReport } from './imaging';
+
+// Uploaded imaging study with analysis
+export interface UploadedImagingStudy {
+  study: ImagingStudy;
+  medgemmaAnalysis?: MedGemmaResponse;
+  uploadedAt: string;  // ISO date
+  status: 'pending' | 'analyzing' | 'complete' | 'error';
+  errorMessage?: string;
+}
+
+// Extended upload session with V6 imaging features
+export interface UploadSessionV6 extends UploadSessionV5 {
+  // User-uploaded imaging (DICOM, camera, gallery)
+  imagingStudies?: UploadedImagingStudy[];
+  
+  // Extracted radiology reports (from OCR'd PDFs)
+  extractedRadiologyReports?: ExtractedRadiologyReport[];
+  
+  // Imaging-specific metadata
+  hasUserUploadedImaging: boolean;
+  imagingConsentAccepted: boolean;
+  
+  // RECIST tracking (if multiple timepoints uploaded)
+  recistBaseline?: {
+    studyId: string;
+    studyDate: string;
+    targetLesionSum: number;
+  };
+}

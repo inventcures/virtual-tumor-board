@@ -18,10 +18,12 @@ import {
   ClipboardList,
   Calendar,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Scan,
+  Loader2
 } from "lucide-react";
 import { TreatmentTimeline } from "@/components/TreatmentTimeline";
-import type { AutoStageResult } from "@/types/user-upload";
+import type { AutoStageResult, UploadSessionV6, UploadedImagingStudy } from "@/types/user-upload";
 import type { 
   UploadSession, 
   DocumentType, 
@@ -49,7 +51,7 @@ const DOC_ICONS: Record<DocumentType, typeof FileText> = {
 };
 
 // Agent limitations based on missing documents
-function getAgentLimitations(missingDocs: DocumentType[]): AgentLimitation[] {
+function getAgentLimitations(missingDocs: DocumentType[], hasImagingStudies: boolean = false): AgentLimitation[] {
   const limitations: AgentLimitation[] = [];
 
   if (missingDocs.includes('pathology')) {
@@ -66,19 +68,32 @@ function getAgentLimitations(missingDocs: DocumentType[]): AgentLimitation[] {
   }
 
   if (missingDocs.includes('radiology')) {
-    limitations.push({
-      agentId: 'radiologist',
-      limitation: 'Cannot assess tumor extent or staging',
-      canStillOpine: false,
-    });
+    // If user uploaded actual imaging (DICOM/photos), Dr. Chitran can still analyze
+    if (hasImagingStudies) {
+      limitations.push({
+        agentId: 'radiologist',
+        limitation: 'No radiology report uploaded, but AI analysis available from uploaded scans',
+        canStillOpine: true,
+      });
+    } else {
+      limitations.push({
+        agentId: 'radiologist',
+        limitation: 'Cannot assess tumor extent or staging',
+        canStillOpine: false,
+      });
+    }
     limitations.push({
       agentId: 'surgical-oncologist',
-      limitation: 'Cannot assess resectability without imaging',
+      limitation: hasImagingStudies 
+        ? 'Using AI imaging analysis (no formal radiology report)' 
+        : 'Cannot assess resectability without imaging',
       canStillOpine: true,
     });
     limitations.push({
       agentId: 'radiation-oncologist',
-      limitation: 'Cannot plan radiation without imaging',
+      limitation: hasImagingStudies
+        ? 'Using AI imaging analysis (no formal radiology report)'
+        : 'Cannot plan radiation without imaging',
       canStillOpine: true,
     });
   }
@@ -105,7 +120,8 @@ function getAgentLimitations(missingDocs: DocumentType[]): AgentLimitation[] {
 // Calculate completeness score
 function calculateCompleteness(
   uploadedTypes: DocumentType[],
-  cancerSiteId: string
+  cancerSiteId: string,
+  hasImagingStudies: boolean = false
 ): CompletenessResult {
   const cancerSite = getCancerSiteById(cancerSiteId);
   
@@ -126,34 +142,60 @@ function calculateCompleteness(
   // Check critical documents
   for (const docType of cancerSite.requiredDocs.critical) {
     if (!uploadedSet.has(docType)) {
-      missingCritical.push({
-        type: docType,
-        importance: 'critical',
-        impact: MISSING_DOC_IMPACT[docType] || 'May limit analysis',
-        example: getDocumentExample(docType),
-      });
+      // V6: If radiology is missing but imaging is uploaded, note it differently
+      if (docType === 'radiology' && hasImagingStudies) {
+        missingCritical.push({
+          type: docType,
+          importance: 'critical',
+          impact: 'Radiology report missing, but AI analysis available from uploaded scans',
+          example: getDocumentExample(docType),
+        });
+      } else {
+        missingCritical.push({
+          type: docType,
+          importance: 'critical',
+          impact: MISSING_DOC_IMPACT[docType] || 'May limit analysis',
+          example: getDocumentExample(docType),
+        });
+      }
     }
   }
 
   // Check recommended documents
   for (const docType of cancerSite.requiredDocs.recommended) {
     if (!uploadedSet.has(docType)) {
-      missingRecommended.push({
-        type: docType,
-        importance: 'recommended',
-        impact: MISSING_DOC_IMPACT[docType] || 'May limit analysis',
-        example: getDocumentExample(docType),
-      });
+      if (docType === 'radiology' && hasImagingStudies) {
+        missingRecommended.push({
+          type: docType,
+          importance: 'recommended',
+          impact: 'Radiology report missing, but AI analysis available from uploaded scans',
+          example: getDocumentExample(docType),
+        });
+      } else {
+        missingRecommended.push({
+          type: docType,
+          importance: 'recommended',
+          impact: MISSING_DOC_IMPACT[docType] || 'May limit analysis',
+          example: getDocumentExample(docType),
+        });
+      }
     }
   }
 
   // Calculate score
   const criticalCount = cancerSite.requiredDocs.critical.length;
   const recommendedCount = cancerSite.requiredDocs.recommended.length;
-  const totalImportant = criticalCount + recommendedCount;
 
-  const criticalMet = criticalCount - missingCritical.length;
-  const recommendedMet = recommendedCount - missingRecommended.length;
+  let criticalMet = criticalCount - missingCritical.length;
+  let recommendedMet = recommendedCount - missingRecommended.length;
+  
+  // V6: Give partial credit for radiology if imaging is uploaded (even without report)
+  if (hasImagingStudies) {
+    const radiologyMissingCritical = missingCritical.some(d => d.type === 'radiology');
+    const radiologyMissingRecommended = missingRecommended.some(d => d.type === 'radiology');
+    if (radiologyMissingCritical) criticalMet += 0.5; // Half credit
+    if (radiologyMissingRecommended) recommendedMet += 0.5;
+  }
 
   // Critical docs are worth 60%, recommended 40%
   const criticalScore = criticalCount > 0 ? (criticalMet / criticalCount) * 60 : 60;
@@ -162,7 +204,7 @@ function calculateCompleteness(
 
   // Get agent limitations
   const missingTypes = [...missingCritical, ...missingRecommended].map(d => d.type);
-  const agentLimitations = getAgentLimitations(missingTypes);
+  const agentLimitations = getAgentLimitations(missingTypes, hasImagingStudies);
 
   return {
     completenessScore,
@@ -190,12 +232,18 @@ function getDocumentExample(docType: DocumentType): string {
 
 export default function ReviewPage() {
   const router = useRouter();
-  const [session, setSession] = useState<UploadSession | null>(null);
+  const [session, setSession] = useState<UploadSessionV6 | null>(null);
   const [isStartingDeliberation, setIsStartingDeliberation] = useState(false);
   const [showTimeline, setShowTimeline] = useState(true);
+  const [showImagingDetails, setShowImagingDetails] = useState(false);
   
   // Auto-stage result (if available)
-  const autoStageResult: AutoStageResult | undefined = (session as any)?.autoStageResult;
+  const autoStageResult: AutoStageResult | undefined = session?.autoStageResult;
+  
+  // V6: Imaging studies
+  const imagingStudies: UploadedImagingStudy[] = session?.imagingStudies || [];
+  const hasImaging = imagingStudies.length > 0;
+  const completedImagingAnalyses = imagingStudies.filter(s => s.status === 'complete').length;
 
   // Load session from localStorage
   useEffect(() => {
@@ -206,7 +254,7 @@ export default function ReviewPage() {
     }
     
     try {
-      const parsed: UploadSession = JSON.parse(stored);
+      const parsed = JSON.parse(stored) as UploadSessionV6;
       if (!parsed.cancerSite || !parsed.documents?.length) {
         router.push("/upload/documents");
         return;
@@ -221,8 +269,8 @@ export default function ReviewPage() {
   const completeness = useMemo(() => {
     if (!session) return null;
     const uploadedTypes = session.documents.map(d => d.classifiedType);
-    return calculateCompleteness(uploadedTypes, session.cancerSite);
-  }, [session]);
+    return calculateCompleteness(uploadedTypes, session.cancerSite, hasImaging);
+  }, [session, hasImaging]);
 
   const handleBack = () => {
     router.push("/upload/documents");
@@ -447,6 +495,93 @@ export default function ReviewPage() {
               )}
             </div>
           </div>
+
+          {/* V6: Medical Imaging Status */}
+          {hasImaging && (
+            <div className="bg-gradient-to-r from-cyan-900/30 to-indigo-900/30 rounded-xl border border-cyan-700/30 overflow-hidden">
+              <button
+                onClick={() => setShowImagingDetails(!showImagingDetails)}
+                className="w-full flex items-center justify-between p-4 hover:bg-slate-800/20 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                    <Scan className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-white flex items-center gap-2">
+                      Medical Imaging
+                      <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full">
+                        {imagingStudies.length} scan{imagingStudies.length !== 1 ? 's' : ''}
+                      </span>
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      {completedImagingAnalyses === imagingStudies.length 
+                        ? `${completedImagingAnalyses} AI analysis complete`
+                        : `${completedImagingAnalyses}/${imagingStudies.length} analyzed`
+                      }
+                    </p>
+                  </div>
+                </div>
+                {showImagingDetails ? (
+                  <ChevronUp className="w-5 h-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-slate-400" />
+                )}
+              </button>
+
+              {showImagingDetails && (
+                <div className="border-t border-cyan-700/30 p-4 space-y-3">
+                  {imagingStudies.map((item) => (
+                    <div
+                      key={item.study.id}
+                      className="flex items-start gap-3 p-3 bg-slate-800/50 rounded-lg"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0">
+                        <Scan className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-white text-sm truncate">
+                          {item.study.description || item.study.modality}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {item.study.source === 'dicom' ? 'DICOM Upload' : 
+                           item.study.source === 'photo' ? 'Camera Capture' : 'Gallery Upload'}
+                        </p>
+                        {item.medgemmaAnalysis && (
+                          <div className="mt-2 text-xs text-slate-300">
+                            <span className="text-cyan-400 font-medium">AI Impression: </span>
+                            <span className="line-clamp-2">
+                              {item.medgemmaAnalysis.impression || item.medgemmaAnalysis.interpretation}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0">
+                        {item.status === 'analyzing' && (
+                          <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+                        )}
+                        {item.status === 'complete' && (
+                          <CheckCircle className="w-5 h-5 text-emerald-400" />
+                        )}
+                        {item.status === 'error' && (
+                          <XCircle className="w-5 h-5 text-red-400" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="bg-cyan-900/30 rounded-lg p-3 text-xs text-cyan-300">
+                    <p className="font-medium mb-1">Dr. Chitran (AI Radiologist) will:</p>
+                    <ul className="list-disc list-inside text-cyan-400/80 space-y-0.5">
+                      <li>Review MedGemma AI analysis alongside any uploaded reports</li>
+                      <li>Flag discrepancies between AI and radiologist interpretations</li>
+                      <li>Provide staging and RECIST assessments where applicable</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Agent Limitations */}
           {completeness.agentLimitations.length > 0 && (
