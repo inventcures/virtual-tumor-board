@@ -4,9 +4,10 @@ import { useState, useCallback } from "react";
 import { TumorBoardUI } from "@/components/TumorBoardUI";
 import { CaseSummary } from "@/components/CaseSummary";
 import { ImagingReviewTab } from "@/components/ImagingReviewTab";
-import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload } from "lucide-react";
+import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { SAMPLE_CASES, SampleCase, CASE_SUMMARY } from "@/lib/sample-cases";
+import { MyImagingTab } from "@/components/my-imaging";
 
 // Convert SampleCase to the format expected by CaseSummary
 function convertToCaseData(sampleCase: SampleCase) {
@@ -62,7 +63,7 @@ function convertToCaseData(sampleCase: SampleCase) {
   };
 }
 
-type TabType = "case" | "imaging" | "deliberation";
+type TabType = "case" | "imaging" | "my-imaging" | "deliberation";
 
 export default function Home() {
   const [currentCaseIndex, setCurrentCaseIndex] = useState(0);
@@ -223,6 +224,18 @@ export default function Home() {
               <Image className="w-4 h-4" />
               Imaging Review
             </button>
+            <button
+              onClick={() => setActiveTab("my-imaging")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "my-imaging"
+                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+                  : "text-slate-400 hover:text-slate-300 border border-dashed border-slate-600"
+              }`}
+            >
+              <ScanLine className="w-4 h-4" />
+              My Scans
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">NEW</span>
+            </button>
           </div>
         )}
 
@@ -299,6 +312,12 @@ export default function Home() {
                 caseId={currentCase.id}
                 cancerType={currentCase.cancer.type}
                 patientName={currentCase.patient.name}
+              />
+            )}
+
+            {activeTab === "my-imaging" && (
+              <MyImagingTab 
+                caseId={currentCase.id}
               />
             )}
           </>
