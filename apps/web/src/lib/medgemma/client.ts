@@ -16,6 +16,7 @@ import {
   Measurement
 } from "@/types/imaging";
 import { IMAGING_ANALYSIS_PROMPTS } from "./prompts";
+import { getImagingAnalytics } from "@/lib/analytics";
 
 // HuggingFace Space running MedGemma 27B on ZeroGPU (fallback)
 const MEDGEMMA_27B_SPACE = "warshanks/medgemma-27b-it";
@@ -42,6 +43,8 @@ export class MedGemmaClient {
     context: AnalysisContext
   ): Promise<MedGemmaResponse> {
     const prompt = this.buildPrompt(image.metadata, context);
+    const startTime = Date.now();
+    const analytics = getImagingAnalytics();
 
     // Priority 1: Vertex AI (Primary)
     if (this.config.provider === 'vertex-ai' || process.env.GOOGLE_CLOUD_PROJECT) {
@@ -53,6 +56,19 @@ export class MedGemmaClient {
           provider: 'Google Vertex AI',
           version: 'Model Garden'
         };
+        
+        // Log successful analytics
+        analytics.logMedGemmaAnalysis({
+          model: 'medgemma-27b-it',
+          provider: 'Google Vertex AI',
+          modality: image.metadata.modality,
+          bodyPart: image.metadata.bodyPart,
+          latencyMs: Date.now() - startTime,
+          success: true,
+          confidence: response.confidence,
+          findingsCount: response.findings?.length || 0,
+        });
+        
         return response;
       } catch (error) {
         console.warn('[MedGemma] Vertex AI failed, trying HF Space fallback:', error);
@@ -68,6 +84,19 @@ export class MedGemmaClient {
         provider: 'HuggingFace Space',
         version: 'ZeroGPU (warshanks/medgemma-27b-it)'
       };
+      
+      // Log successful analytics
+      analytics.logMedGemmaAnalysis({
+        model: 'medgemma-27b-it',
+        provider: 'HuggingFace Space',
+        modality: image.metadata.modality,
+        bodyPart: image.metadata.bodyPart,
+        latencyMs: Date.now() - startTime,
+        success: true,
+        confidence: response.confidence,
+        findingsCount: response.findings?.length || 0,
+      });
+      
       return response;
     } catch (error) {
       console.warn('[MedGemma] HF Space failed, trying Gemini fallback:', error);
@@ -82,9 +111,34 @@ export class MedGemmaClient {
         provider: 'Google AI Studio',
         version: 'Gemini 2.0 Flash (Vision fallback)'
       };
+      
+      // Log successful analytics
+      analytics.logMedGemmaAnalysis({
+        model: 'gemini-2.0-flash-exp',
+        provider: 'Google AI Studio',
+        modality: image.metadata.modality,
+        bodyPart: image.metadata.bodyPart,
+        latencyMs: Date.now() - startTime,
+        success: true,
+        confidence: response.confidence,
+        findingsCount: response.findings?.length || 0,
+      });
+      
       return response;
     } catch (error) {
       console.error('[MedGemma] All providers failed:', error);
+      
+      // Log failure analytics
+      analytics.logMedGemmaAnalysis({
+        model: 'all-providers-failed',
+        provider: 'none',
+        modality: image.metadata.modality,
+        bodyPart: image.metadata.bodyPart,
+        latencyMs: Date.now() - startTime,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      
       return this.generateDemoResponse(image.metadata, context);
     }
   }

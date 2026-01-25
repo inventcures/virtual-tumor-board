@@ -15,6 +15,8 @@
  * - Kidney tumor segmentation (CT)
  */
 
+import { getImagingAnalytics } from "@/lib/analytics";
+
 export interface OncoSegConfig {
   spaceUrl?: string;
   hfToken?: string;
@@ -162,10 +164,41 @@ export class OncoSegClient {
       const totalTime = Date.now() - startTime;
       console.log(`[OncoSeg] Segmentation complete in ${totalTime}ms (inference: ${result.inferenceTimeMs}ms)`);
 
+      // Log successful analytics
+      try {
+        getImagingAnalytics().logOncoSegmentation({
+          checkpoint: request.checkpoint || 'brain',
+          backend: result.backend,
+          sliceIdx: request.sliceIdx,
+          sliceCount: 1,
+          latencyMs: totalTime,
+          success: true,
+          contourCount: result.contours?.length || 0,
+        });
+      } catch (e) {
+        console.warn('[OncoSeg] Analytics logging failed:', e);
+      }
+
       return result;
 
     } catch (error) {
       console.error('[OncoSeg] Segmentation error:', error);
+      
+      // Log failure analytics
+      try {
+        getImagingAnalytics().logOncoSegmentation({
+          checkpoint: request.checkpoint || 'brain',
+          backend: 'fallback',
+          sliceIdx: request.sliceIdx,
+          sliceCount: 1,
+          latencyMs: Date.now() - startTime,
+          success: false,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+      } catch (e) {
+        console.warn('[OncoSeg] Analytics logging failed:', e);
+      }
+      
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -233,10 +266,41 @@ export class OncoSegClient {
       const totalTime = Date.now() - startTime;
       console.log(`[OncoSeg] Volume segmentation complete in ${totalTime}ms, ${result.slicesWithTumor.length} slices with detections`);
 
+      // Log successful analytics
+      try {
+        getImagingAnalytics().logOncoSegmentation({
+          checkpoint: request.checkpoint || 'brain',
+          backend: result.backend,
+          sliceIdx: 0,
+          sliceCount: result.numSlices,
+          latencyMs: totalTime,
+          success: true,
+          contourCount: result.slicesWithTumor.length,
+        });
+      } catch (e) {
+        console.warn('[OncoSeg] Analytics logging failed:', e);
+      }
+
       return result;
 
     } catch (error) {
       console.error('[OncoSeg] Volume segmentation error:', error);
+      
+      // Log failure analytics
+      try {
+        getImagingAnalytics().logOncoSegmentation({
+          checkpoint: request.checkpoint || 'brain',
+          backend: 'fallback',
+          sliceIdx: 0,
+          sliceCount: 0,
+          latencyMs: Date.now() - startTime,
+          success: false,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+      } catch (e) {
+        console.warn('[OncoSeg] Analytics logging failed:', e);
+      }
+      
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
