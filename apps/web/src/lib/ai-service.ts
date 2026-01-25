@@ -100,7 +100,7 @@ async function callGemini(
   systemPrompt: string,
   maxTokens: number = 4096
 ): Promise<AIResponse> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY;
   
   if (!apiKey) {
     throw {
