@@ -1,9 +1,12 @@
 /**
- * Enhanced PDF Report Generator V2 for Virtual Tumor Board
+ * Enhanced PDF Report Generator V2.1 for Virtual Tumor Board
+ * 
+ * MAJOR UPDATE: Full specialist opinions (3/4 page each minimum)
  * 
  * Features:
  * - Medical literacy level customization (Simple, Standard, Technical)
  * - Color-coded subspecialty section headers with icons
+ * - FULL specialist opinions with proper pagination (7-8 paragraphs each)
  * - Improved readability with better spacing and typography
  * - Organ diagrams with tumor location markers
  * - Layman-friendly staging explanations
@@ -23,6 +26,9 @@ export interface LiteracyConfig {
   includeStatistics: boolean;
   includeCitations: boolean;
   simplifyLanguage: boolean;
+  // V2.1: Content length settings
+  minSpecialistParagraphs: number;
+  maxSpecialistChars: number;
 }
 
 export const LITERACY_CONFIGS: Record<MedicalLiteracyLevel, LiteracyConfig> = {
@@ -30,11 +36,13 @@ export const LITERACY_CONFIGS: Record<MedicalLiteracyLevel, LiteracyConfig> = {
     level: 'simple',
     label: 'Easy to Understand',
     description: 'Simple language, no medical jargon. Best for patients and caregivers with limited medical knowledge.',
-    fontSizeMultiplier: 1.15,
+    fontSizeMultiplier: 1.1,
     includeTerminology: false,
     includeStatistics: false,
     includeCitations: false,
     simplifyLanguage: true,
+    minSpecialistParagraphs: 5,
+    maxSpecialistChars: 4000,
   },
   standard: {
     level: 'standard',
@@ -45,16 +53,20 @@ export const LITERACY_CONFIGS: Record<MedicalLiteracyLevel, LiteracyConfig> = {
     includeStatistics: true,
     includeCitations: false,
     simplifyLanguage: false,
+    minSpecialistParagraphs: 6,
+    maxSpecialistChars: 5000,
   },
   technical: {
     level: 'technical',
     label: 'Medical Professional',
     description: 'Full medical terminology with citations. For doctors, nurses, and healthcare professionals.',
-    fontSizeMultiplier: 0.95,
+    fontSizeMultiplier: 0.92,
     includeTerminology: true,
     includeStatistics: true,
     includeCitations: true,
     simplifyLanguage: false,
+    minSpecialistParagraphs: 8,
+    maxSpecialistChars: 8000,  // Full detailed response
   },
 };
 
@@ -65,59 +77,67 @@ export const SUBSPECIALTY_COLORS: Record<string, {
   accent: [number, number, number];
   icon: string;
   name: string;
+  fullName: string;
 }> = {
   'surgical-oncologist': {
     primary: [220, 38, 38],     // Red-600
     secondary: [254, 226, 226], // Red-100
     accent: [185, 28, 28],      // Red-700
-    icon: 'S',                  // Scalpel symbol
+    icon: 'S',
     name: 'Surgical Oncology',
+    fullName: 'Dr. Shalya - Surgical Oncology',
   },
   'medical-oncologist': {
     primary: [37, 99, 235],     // Blue-600
     secondary: [219, 234, 254], // Blue-100
     accent: [29, 78, 216],      // Blue-700
-    icon: 'M',                  // Medicine symbol
+    icon: 'M',
     name: 'Medical Oncology',
+    fullName: 'Dr. Chikitsa - Medical Oncology',
   },
   'radiation-oncologist': {
     primary: [245, 158, 11],    // Amber-500
     secondary: [254, 243, 199], // Amber-100
     accent: [217, 119, 6],      // Amber-600
-    icon: 'R',                  // Radiation symbol
+    icon: 'R',
     name: 'Radiation Oncology',
+    fullName: 'Dr. Kirann - Radiation Oncology',
   },
   'palliative-care': {
     primary: [147, 51, 234],    // Purple-600
     secondary: [243, 232, 255], // Purple-100
     accent: [126, 34, 206],     // Purple-700
-    icon: 'P',                  // Peace symbol
+    icon: 'P',
     name: 'Palliative Care',
+    fullName: 'Dr. Shanti - Palliative Care',
   },
   'radiologist': {
     primary: [6, 182, 212],     // Cyan-500
     secondary: [207, 250, 254], // Cyan-100
     accent: [8, 145, 178],      // Cyan-600
-    icon: 'I',                  // Imaging symbol
+    icon: 'I',
     name: 'Onco-Radiology',
+    fullName: 'Dr. Chitran - Onco-Radiology',
   },
   'pathologist': {
     primary: [236, 72, 153],    // Pink-500
     secondary: [252, 231, 243], // Pink-100
     accent: [219, 39, 119],     // Pink-600
-    icon: 'L',                  // Lab symbol
+    icon: 'L',
     name: 'Pathology',
+    fullName: 'Dr. Marga - Pathology',
   },
   'geneticist': {
     primary: [16, 185, 129],    // Emerald-500
     secondary: [209, 250, 229], // Emerald-100
     accent: [5, 150, 105],      // Emerald-600
-    icon: 'G',                  // Gene symbol
+    icon: 'G',
     name: 'Genetics',
+    fullName: 'Dr. Anuvamsha - Genetics',
   },
 };
 
-// Organ SVG paths (simplified for PDF rendering)
+// Organ diagrams
 const ORGAN_DIAGRAMS: Record<string, {
   name: string;
   viewBox: string;
@@ -198,7 +218,6 @@ function simplifyText(text: string, literacy: MedicalLiteracyLevel): string {
     .replace(/`/g, '');
   
   if (literacy === 'simple') {
-    // Replace common medical terms with simpler alternatives
     const replacements: [RegExp, string][] = [
       [/metastasis|metastases|metastatic/gi, 'spread'],
       [/oncologist/gi, 'cancer doctor'],
@@ -232,29 +251,46 @@ function simplifyText(text: string, literacy: MedicalLiteracyLevel): string {
   return simplified;
 }
 
-// Extract summary from response
-function extractSummary(response: string, maxLength: number, literacy: MedicalLiteracyLevel): string {
+// V2.1: Get full specialist content (not truncated summary)
+function getFullSpecialistContent(response: string, maxChars: number, literacy: MedicalLiteracyLevel): string {
   let text = simplifyText(response, literacy);
   
-  // Get first meaningful paragraphs
-  const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 30);
-  let summary = '';
+  // Clean up markdown formatting for PDF
+  text = text
+    .replace(/#{1,6}\s*/g, '')  // Remove headers (we'll add our own styling)
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove bold markers
+    .replace(/\*([^*]+)\*/g, '$1')  // Remove italic markers
+    .replace(/`([^`]+)`/g, '$1')  // Remove code markers
+    .replace(/\n{3,}/g, '\n\n')  // Normalize multiple newlines
+    .trim();
   
-  for (const p of paragraphs) {
-    if (summary.length + p.length > maxLength) break;
-    summary += (summary ? '\n\n' : '') + p.trim();
+  // Limit to max chars but try to end at a sentence
+  if (text.length > maxChars) {
+    text = text.slice(0, maxChars);
+    // Try to end at a sentence
+    const lastPeriod = text.lastIndexOf('.');
+    const lastExclaim = text.lastIndexOf('!');
+    const lastQuestion = text.lastIndexOf('?');
+    const lastSentenceEnd = Math.max(lastPeriod, lastExclaim, lastQuestion);
+    
+    if (lastSentenceEnd > maxChars * 0.7) {
+      text = text.slice(0, lastSentenceEnd + 1);
+    } else {
+      text += '...';
+    }
   }
   
-  return summary || text.slice(0, maxLength);
+  return text;
 }
 
-// Draw colored section header with icon
+// Draw colored section header with icon (enhanced for full-page sections)
 function drawSubspecialtyHeader(
   doc: jsPDF,
   agentId: string,
   x: number,
   y: number,
-  width: number
+  width: number,
+  isFullSection: boolean = false
 ): number {
   const colors = SUBSPECIALTY_COLORS[agentId] || {
     primary: [100, 100, 100],
@@ -262,36 +298,40 @@ function drawSubspecialtyHeader(
     accent: [80, 80, 80],
     icon: '?',
     name: agentId,
+    fullName: agentId,
   };
   
-  const headerHeight = 10;
+  const headerHeight = isFullSection ? 14 : 10;
   
   // Background with rounded corners
   doc.setFillColor(...colors.secondary);
   doc.roundedRect(x, y, width, headerHeight, 2, 2, 'F');
   
-  // Left accent bar
+  // Left accent bar (thicker for full sections)
   doc.setFillColor(...colors.primary);
-  doc.roundedRect(x, y, 4, headerHeight, 2, 2, 'F');
-  doc.rect(x + 2, y, 2, headerHeight, 'F'); // Square off right side of accent
+  const barWidth = isFullSection ? 5 : 4;
+  doc.roundedRect(x, y, barWidth, headerHeight, 2, 2, 'F');
+  doc.rect(x + barWidth - 2, y, 2, headerHeight, 'F');
   
   // Icon circle
-  const iconX = x + 10;
+  const iconX = x + (isFullSection ? 12 : 10);
   const iconY = y + headerHeight / 2;
+  const iconRadius = isFullSection ? 4.5 : 3.5;
   doc.setFillColor(...colors.primary);
-  doc.circle(iconX, iconY, 3.5, 'F');
+  doc.circle(iconX, iconY, iconRadius, 'F');
   
   // Icon letter
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(7);
+  doc.setFontSize(isFullSection ? 9 : 7);
   doc.setFont('helvetica', 'bold');
-  doc.text(colors.icon, iconX, iconY + 0.8, { align: 'center' });
+  doc.text(colors.icon, iconX, iconY + (isFullSection ? 1.2 : 0.8), { align: 'center' });
   
   // Specialty name
   doc.setTextColor(...colors.accent);
-  doc.setFontSize(11);
+  doc.setFontSize(isFullSection ? 13 : 11);
   doc.setFont('helvetica', 'bold');
-  doc.text(colors.name, x + 18, y + 6.5);
+  const displayName = isFullSection ? colors.fullName : colors.name;
+  doc.text(displayName, x + (isFullSection ? 22 : 18), y + (isFullSection ? 9 : 6.5));
   
   return headerHeight;
 }
@@ -301,12 +341,10 @@ function drawOrganDiagram(doc: jsPDF, organ: typeof ORGAN_DIAGRAMS[string], x: n
   const centerX = x + size / 2;
   const centerY = y + size / 2;
   
-  // Draw organ outline (simplified ellipse)
   doc.setFillColor(252, 228, 236);
   doc.setDrawColor(248, 187, 217);
   doc.ellipse(centerX, centerY, size * 0.4, size * 0.35, 'FD');
   
-  // Draw tumor marker
   if (organ.tumorLocation) {
     const tumorX = x + (organ.tumorLocation.x / 200) * size;
     const tumorY = y + (organ.tumorLocation.y / 200) * size;
@@ -320,7 +358,6 @@ function drawOrganDiagram(doc: jsPDF, organ: typeof ORGAN_DIAGRAMS[string], x: n
     doc.line(tumorX, tumorY - 8, tumorX, tumorY + 8);
   }
   
-  // Label
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.text(organ.name, centerX, y + size + 5, { align: 'center' });
@@ -338,6 +375,98 @@ interface CaseInfo {
   stage?: string;
   tnm?: string;
   documentCount?: number;
+}
+
+// V2.1: Render a full specialist section with proper pagination
+function renderSpecialistSection(
+  doc: jsPDF,
+  agentId: string,
+  response: AgentResponse,
+  config: LiteracyConfig,
+  startY: number,
+  pageWidth: number,
+  pageHeight: number,
+  margin: number
+): number {
+  const contentWidth = pageWidth - 2 * margin;
+  const baseFontSize = 9.5 * config.fontSizeMultiplier;
+  const lineHeight = baseFontSize * 0.42;
+  let yPos = startY;
+  
+  // Draw header
+  const headerHeight = drawSubspecialtyHeader(doc, agentId, margin, yPos, contentWidth, true);
+  yPos += headerHeight + 4;
+  
+  // Get full content
+  const content = getFullSpecialistContent(response.response, config.maxSpecialistChars, config.level);
+  
+  // Set up text styling
+  doc.setTextColor(50, 50, 50);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(baseFontSize);
+  
+  // Split content into lines that fit the width
+  const textLines = doc.splitTextToSize(content, contentWidth - 8);
+  
+  // Calculate how many lines fit on current page
+  const availableHeight = pageHeight - yPos - 25; // Leave room for footer/margin
+  const linesPerPage = Math.floor(availableHeight / lineHeight);
+  
+  let currentLineIndex = 0;
+  
+  while (currentLineIndex < textLines.length) {
+    // Calculate lines for this page
+    const remainingLines = textLines.length - currentLineIndex;
+    const linesToRender = Math.min(
+      currentLineIndex === 0 ? linesPerPage : Math.floor((pageHeight - margin - 25) / lineHeight),
+      remainingLines
+    );
+    
+    // Render lines
+    const pageLines = textLines.slice(currentLineIndex, currentLineIndex + linesToRender);
+    doc.text(pageLines, margin + 4, yPos);
+    
+    currentLineIndex += linesToRender;
+    yPos += linesToRender * lineHeight;
+    
+    // Check if we need a new page for remaining content
+    if (currentLineIndex < textLines.length) {
+      doc.addPage();
+      yPos = margin;
+      
+      // Add continuation header
+      const colors = SUBSPECIALTY_COLORS[agentId];
+      doc.setFillColor(...(colors?.secondary || [240, 240, 240]));
+      doc.roundedRect(margin, yPos, contentWidth, 8, 2, 2, 'F');
+      doc.setTextColor(...(colors?.accent || [80, 80, 80]));
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'italic');
+      doc.text(`${colors?.name || agentId} (continued)`, margin + 4, yPos + 5.5);
+      yPos += 12;
+      
+      // Reset text style
+      doc.setTextColor(50, 50, 50);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(baseFontSize);
+    }
+  }
+  
+  // Add citations if technical level
+  if (config.includeCitations && response.citations?.length > 0) {
+    yPos += 3;
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'italic');
+    const citationText = `References: ${response.citations.join(', ')}`;
+    const citationLines = doc.splitTextToSize(citationText, contentWidth - 8);
+    doc.text(citationLines, margin + 4, yPos);
+    yPos += citationLines.length * 3 + 2;
+  }
+  
+  // Add spacing after section
+  yPos += 8;
+  
+  return yPos;
 }
 
 // Main PDF generation function
@@ -362,11 +491,11 @@ export async function generateEnhancedPDFReport(
   const contentWidth = pageWidth - 2 * margin;
   let yPos = margin;
 
-  // === COVER PAGE HEADER ===
-  // Gradient-like header (multiple rectangles)
-  doc.setFillColor(79, 70, 229); // Indigo
+  // === PAGE 1: COVER PAGE ===
+  // Header gradient
+  doc.setFillColor(79, 70, 229);
   doc.rect(0, 0, pageWidth, 40, 'F');
-  doc.setFillColor(99, 102, 241); // Lighter indigo stripe
+  doc.setFillColor(99, 102, 241);
   doc.rect(0, 35, pageWidth, 5, 'F');
   
   // Title
@@ -375,7 +504,7 @@ export async function generateEnhancedPDFReport(
   doc.setFont('helvetica', 'bold');
   doc.text('Virtual Tumor Board Report', margin, 18);
   
-  // Subtitle based on literacy level
+  // Subtitle
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   const subtitles: Record<MedicalLiteracyLevel, string> = {
@@ -397,13 +526,11 @@ export async function generateEnhancedPDFReport(
   // === CASE INFO & ORGAN DIAGRAM ===
   const organDiagram = getOrganDiagram(caseInfo.cancerSite || '');
   
-  // Draw organ diagram on right
   const diagramSize = 45;
   const diagramX = pageWidth - margin - diagramSize;
   const diagramY = yPos;
   drawOrganDiagram(doc, organDiagram, diagramX, diagramY, diagramSize);
   
-  // Case info on left
   doc.setTextColor(30, 30, 30);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
@@ -415,7 +542,6 @@ export async function generateEnhancedPDFReport(
   doc.setFontSize(baseFontSize);
   doc.setFont('helvetica', 'normal');
   
-  // Info labels vary by literacy
   const siteLabel = literacyLevel === 'simple' ? 'Type of cancer:' : 'Cancer Site:';
   const stageLabel = literacyLevel === 'simple' ? 'Stage:' : 'Clinical Stage:';
   const docsLabel = literacyLevel === 'simple' ? 'Documents reviewed:' : 'Documents Analyzed:';
@@ -438,28 +564,23 @@ export async function generateEnhancedPDFReport(
   yPos += 3;
   const stagingExplanation = getStagingExplanation(caseInfo.stage, literacyLevel);
   
-  // Box dimensions
   const explanationLines = doc.splitTextToSize(stagingExplanation, contentWidth - 12);
   const boxHeight = Math.max(28, explanationLines.length * 4.5 + 14);
   
-  // Box background
-  doc.setFillColor(255, 243, 224); // Light amber
+  doc.setFillColor(255, 243, 224);
   doc.setDrawColor(255, 183, 77);
   doc.roundedRect(margin, yPos, contentWidth, boxHeight, 3, 3, 'FD');
   
-  // Header bar
   doc.setFillColor(255, 183, 77);
   doc.roundedRect(margin, yPos, contentWidth, 9, 3, 3, 'F');
   doc.rect(margin, yPos + 6, contentWidth, 3, 'F');
   
-  // Header text
   doc.setTextColor(120, 60, 0);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   const stagingTitle = literacyLevel === 'simple' ? 'What This Stage Means For You' : 'What Does This Stage Mean?';
   doc.text(stagingTitle, margin + 5, yPos + 6);
   
-  // Explanation text
   doc.setTextColor(80, 60, 40);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(baseFontSize * 0.9);
@@ -468,12 +589,10 @@ export async function generateEnhancedPDFReport(
   yPos += boxHeight + 8;
 
   // === CONSENSUS SECTION ===
-  // Header
   doc.setFillColor(237, 233, 254);
   doc.setDrawColor(139, 92, 246);
   doc.roundedRect(margin, yPos, contentWidth, 12, 2, 2, 'FD');
   
-  // Icon circle
   doc.setFillColor(139, 92, 246);
   doc.circle(margin + 7, yPos + 6, 4, 'F');
   doc.setTextColor(255, 255, 255);
@@ -481,7 +600,6 @@ export async function generateEnhancedPDFReport(
   doc.setFont('helvetica', 'bold');
   doc.text('C', margin + 7, yPos + 7, { align: 'center' });
   
-  // Title
   doc.setTextColor(67, 56, 202);
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
@@ -492,7 +610,7 @@ export async function generateEnhancedPDFReport(
   
   yPos += 16;
   
-  // Consensus text
+  // Consensus text with proper pagination
   doc.setTextColor(40, 40, 40);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(baseFontSize);
@@ -500,120 +618,115 @@ export async function generateEnhancedPDFReport(
   const cleanConsensus = simplifyText(consensus, literacyLevel);
   const consensusLines = doc.splitTextToSize(cleanConsensus, contentWidth - 4);
   
-  // Paginate if needed
   const lineHeight = baseFontSize * 0.45;
-  const consensusHeight = consensusLines.length * lineHeight;
-  const maxHeightOnPage = pageHeight - yPos - 50;
   
-  if (consensusHeight > maxHeightOnPage) {
-    const linesPerPage = Math.floor(maxHeightOnPage / lineHeight);
-    doc.text(consensusLines.slice(0, linesPerPage), margin + 2, yPos);
+  // Render consensus with pagination
+  let consensusLineIndex = 0;
+  while (consensusLineIndex < consensusLines.length) {
+    const availableHeight = pageHeight - yPos - 30;
+    const linesPerPage = Math.floor(availableHeight / lineHeight);
+    const linesToRender = Math.min(linesPerPage, consensusLines.length - consensusLineIndex);
     
-    doc.addPage();
-    yPos = margin;
+    const pageLines = consensusLines.slice(consensusLineIndex, consensusLineIndex + linesToRender);
+    doc.text(pageLines, margin + 2, yPos);
     
-    // Continue header on new page
-    doc.setFillColor(237, 233, 254);
-    doc.roundedRect(margin, yPos, contentWidth, 8, 2, 2, 'F');
-    doc.setTextColor(67, 56, 202);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'italic');
-    doc.text('Consensus (continued)', margin + 4, yPos + 5.5);
-    yPos += 12;
+    consensusLineIndex += linesToRender;
+    yPos += linesToRender * lineHeight;
     
-    doc.setTextColor(40, 40, 40);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(baseFontSize);
-    doc.text(consensusLines.slice(linesPerPage), margin + 2, yPos);
-    yPos += (consensusLines.length - linesPerPage) * lineHeight + 10;
-  } else {
-    doc.text(consensusLines, margin + 2, yPos);
-    yPos += consensusHeight + 10;
+    if (consensusLineIndex < consensusLines.length) {
+      doc.addPage();
+      yPos = margin;
+      
+      // Continuation header
+      doc.setFillColor(237, 233, 254);
+      doc.roundedRect(margin, yPos, contentWidth, 8, 2, 2, 'F');
+      doc.setTextColor(67, 56, 202);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'italic');
+      doc.text('Consensus (continued)', margin + 4, yPos + 5.5);
+      yPos += 12;
+      
+      doc.setTextColor(40, 40, 40);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(baseFontSize);
+    }
   }
+  
+  yPos += 10;
 
   // === SPECIALIST OPINIONS SECTION ===
-  if (yPos > pageHeight - 60) {
-    doc.addPage();
-    yPos = margin;
-  }
+  // Start each specialist on a new page for cleaner layout and full content
+  doc.addPage();
+  yPos = margin;
   
   // Section header
   doc.setFillColor(236, 253, 245);
   doc.setDrawColor(16, 185, 129);
-  doc.roundedRect(margin, yPos, contentWidth, 12, 2, 2, 'FD');
+  doc.roundedRect(margin, yPos, contentWidth, 14, 2, 2, 'FD');
   
   doc.setFillColor(16, 185, 129);
-  doc.circle(margin + 7, yPos + 6, 4, 'F');
+  doc.circle(margin + 8, yPos + 7, 4.5, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  doc.text('S', margin + 7, yPos + 7, { align: 'center' });
+  doc.text('S', margin + 8, yPos + 8.2, { align: 'center' });
   
   doc.setTextColor(6, 95, 70);
-  doc.setFontSize(13);
+  doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   const specialistTitle = literacyLevel === 'simple'
     ? 'WHAT EACH SPECIALIST SAYS'
     : 'SPECIALIST OPINIONS';
-  doc.text(specialistTitle, margin + 15, yPos + 8);
+  doc.text(specialistTitle, margin + 18, yPos + 9);
   
-  yPos += 18;
+  yPos += 20;
   
-  // Agent order - prioritize based on literacy level
+  // Note about full opinions
+  doc.setFontSize(9);
+  doc.setTextColor(100, 100, 100);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Each specialist provides their detailed assessment below:', margin, yPos);
+  yPos += 8;
+  
+  // Render each specialist with full content
   const agentOrder = literacyLevel === 'simple'
     ? ['medical-oncologist', 'surgical-oncologist', 'radiation-oncologist', 'palliative-care', 'pathologist', 'radiologist', 'geneticist']
     : ['surgical-oncologist', 'medical-oncologist', 'radiation-oncologist', 'pathologist', 'radiologist', 'geneticist', 'palliative-care'];
-  
-  const maxSummaryLength = literacyLevel === 'simple' ? 350 : literacyLevel === 'standard' ? 450 : 600;
   
   for (const agentId of agentOrder) {
     const response = agentResponses[agentId];
     if (!response?.response) continue;
     
-    // Check for new page
-    if (yPos > pageHeight - 55) {
+    // Check if we need a new page (if less than 100mm available)
+    if (yPos > pageHeight - 100) {
       doc.addPage();
       yPos = margin;
     }
     
-    // Draw colored subspecialty header
-    const headerHeight = drawSubspecialtyHeader(doc, agentId, margin, yPos, contentWidth);
-    yPos += headerHeight + 2;
-    
-    // Summary text
-    const summary = extractSummary(response.response, maxSummaryLength, literacyLevel);
-    doc.setTextColor(60, 60, 60);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(baseFontSize * 0.9);
-    
-    const summaryLines = doc.splitTextToSize(summary, contentWidth - 8);
-    const maxLines = literacyLevel === 'simple' ? 6 : 8;
-    const displayLines = summaryLines.slice(0, maxLines);
-    
-    doc.text(displayLines, margin + 4, yPos + 3);
-    yPos += displayLines.length * (baseFontSize * 0.4) + 12;
-    
-    // Citations (technical only)
-    if (config.includeCitations && response.citations?.length > 0) {
-      doc.setFontSize(7);
-      doc.setTextColor(120, 120, 120);
-      doc.setFont('helvetica', 'italic');
-      const citationText = `Refs: ${response.citations.slice(0, 3).join(', ')}`;
-      doc.text(citationText, margin + 4, yPos - 6);
-    }
+    // Render full specialist section
+    yPos = renderSpecialistSection(
+      doc,
+      agentId,
+      response,
+      config,
+      yPos,
+      pageWidth,
+      pageHeight,
+      margin
+    );
   }
 
-  // === DISCLAIMER ===
-  if (yPos > pageHeight - 40) {
+  // === DISCLAIMER (always on last page) ===
+  if (yPos > pageHeight - 45) {
     doc.addPage();
     yPos = margin;
   }
   
-  yPos = Math.max(yPos, pageHeight - 42);
+  yPos = Math.max(yPos, pageHeight - 45);
   
   doc.setFillColor(254, 226, 226);
   doc.setDrawColor(239, 68, 68);
-  doc.roundedRect(margin, yPos, contentWidth, 28, 2, 2, 'FD');
+  doc.roundedRect(margin, yPos, contentWidth, 32, 2, 2, 'FD');
   
   doc.setTextColor(153, 27, 27);
   doc.setFontSize(9);
@@ -632,17 +745,21 @@ export async function generateEnhancedPDFReport(
   };
   
   const disclaimerLines = doc.splitTextToSize(disclaimers[literacyLevel], contentWidth - 10);
-  doc.text(disclaimerLines, margin + 5, yPos + 12);
+  doc.text(disclaimerLines, margin + 5, yPos + 13);
   
-  // Footer
-  doc.setTextColor(150, 150, 150);
-  doc.setFontSize(7);
-  doc.text(
-    'Generated by Virtual Tumor Board | https://virtual-tumor-board-production.up.railway.app', 
-    pageWidth / 2, 
-    pageHeight - 5, 
-    { align: 'center' }
-  );
+  // Footer on every page
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setTextColor(150, 150, 150);
+    doc.setFontSize(7);
+    doc.text(
+      `Page ${i} of ${pageCount} | Virtual Tumor Board | https://virtual-tumor-board-production.up.railway.app`, 
+      pageWidth / 2, 
+      pageHeight - 5, 
+      { align: 'center' }
+    );
+  }
 
   return doc.output('blob');
 }
