@@ -1,0 +1,5 @@
+# OncoSeg API Requirements
+# Pin Gradio to avoid JSON schema issues with nested dicts
+
+gradio==4.36.0
+numpy>=1.24.0

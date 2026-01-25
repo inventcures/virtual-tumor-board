@@ -134,8 +134,17 @@ export default function AdminDashboard() {
             <button
               onClick={fetchData}
               className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+              title="Refresh"
             >
               <RefreshCw className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={() => exportToCSV(summary, realtime)}
+              className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+              title="Export CSV"
+            >
+              <Download className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -174,6 +183,34 @@ export default function AdminDashboard() {
             sublabel={`${summary?.avgPagesPerSession?.toFixed(1) || 0} pages/session`}
           />
         </div>
+
+        {/* Trend Charts */}
+        {summary && (Object.keys(summary.viewsByHour).length > 0 || Object.keys(summary.viewsByDay).length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-5 h-5 text-blue-400" />
+                <h2 className="text-lg font-semibold">Views by Hour</h2>
+              </div>
+              <TrendChart 
+                data={summary.viewsByHour} 
+                label="Hourly Distribution" 
+                color="#3B82F6"
+              />
+            </div>
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart3 className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-lg font-semibold">Views by Day</h2>
+              </div>
+              <TrendChart 
+                data={summary.viewsByDay} 
+                label="Daily Trend" 
+                color="#10B981"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -525,4 +562,158 @@ function FeatureRow({
       </div>
     </div>
   );
+}
+
+// ============================================================================
+// Trend Chart Component (Pure SVG, no dependencies)
+// ============================================================================
+
+function TrendChart({ 
+  data, 
+  label,
+  color = '#3B82F6'
+}: { 
+  data: Record<string, number>;
+  label: string;
+  color?: string;
+}) {
+  const entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
+  
+  if (entries.length === 0) {
+    return (
+      <div className="h-32 flex items-center justify-center text-slate-500 text-sm">
+        No data available
+      </div>
+    );
+  }
+  
+  const values = entries.map(e => e[1]);
+  const maxValue = Math.max(...values, 1);
+  const minValue = Math.min(...values);
+  
+  const width = 100;
+  const height = 40;
+  const padding = 2;
+  
+  // Generate path for area chart
+  const points = entries.map((entry, i) => {
+    const x = padding + (i / (entries.length - 1 || 1)) * (width - padding * 2);
+    const y = height - padding - ((entry[1] - minValue) / (maxValue - minValue || 1)) * (height - padding * 2);
+    return { x, y, value: entry[1], label: entry[0] };
+  });
+  
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath = `${linePath} L ${points[points.length - 1]?.x || 0} ${height} L ${padding} ${height} Z`;
+  
+  const total = values.reduce((a, b) => a + b, 0);
+  const avg = total / values.length;
+  
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm text-slate-400">{label}</span>
+        <span className="text-sm text-slate-300">{total.toLocaleString()} total</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-24">
+        {/* Grid lines */}
+        <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#334155" strokeWidth="0.5" strokeDasharray="2,2" />
+        
+        {/* Area fill */}
+        <path d={areaPath} fill={color} fillOpacity="0.2" />
+        
+        {/* Line */}
+        <path d={linePath} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        
+        {/* Data points */}
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="1.5" fill={color} />
+        ))}
+      </svg>
+      <div className="flex justify-between text-xs text-slate-500 mt-1">
+        <span>{entries[0]?.[0]}</span>
+        <span>Avg: {avg.toFixed(0)}</span>
+        <span>{entries[entries.length - 1]?.[0]}</span>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// CSV Export Function
+// ============================================================================
+
+function exportToCSV(summary: AnalyticsSummary | null, realtime: RealTimeStats | null) {
+  if (!summary) return;
+  
+  const rows: string[][] = [];
+  
+  // Header
+  rows.push(['Virtual Tumor Board Analytics Export']);
+  rows.push([`Generated: ${new Date().toISOString()}`]);
+  rows.push([`Period: ${summary.period}`]);
+  rows.push([]);
+  
+  // Summary stats
+  rows.push(['Summary Statistics']);
+  rows.push(['Metric', 'Value']);
+  rows.push(['Total Page Views', String(summary.totalPageViews)]);
+  rows.push(['Unique Visitors', String(summary.uniqueVisitors)]);
+  rows.push(['New Visitors', String(summary.newVisitors)]);
+  rows.push(['Returning Visitors', String(summary.returningVisitors)]);
+  rows.push(['Bounce Rate', `${summary.bounceRate}%`]);
+  rows.push(['Avg Pages/Session', String(summary.avgPagesPerSession)]);
+  rows.push([]);
+  
+  // Top pages
+  rows.push(['Top Pages']);
+  rows.push(['Path', 'Views', 'Unique Views']);
+  summary.topPages.forEach(p => {
+    rows.push([p.path, String(p.views), String(p.uniqueViews)]);
+  });
+  rows.push([]);
+  
+  // Countries
+  rows.push(['Top Countries']);
+  rows.push(['Country', 'Code', 'Views']);
+  summary.topCountries.forEach(c => {
+    rows.push([c.country, c.countryCode, String(c.count)]);
+  });
+  rows.push([]);
+  
+  // Cities
+  rows.push(['Top Cities']);
+  rows.push(['City', 'Country', 'Views']);
+  summary.topCities.forEach(c => {
+    rows.push([c.city, c.country, String(c.count)]);
+  });
+  rows.push([]);
+  
+  // Feature usage
+  rows.push(['Feature Usage']);
+  rows.push(['Feature', 'Count', 'Success Rate']);
+  Object.entries(summary.featureUsage).forEach(([feature, data]) => {
+    rows.push([feature, String(data.count), `${data.successRate.toFixed(1)}%`]);
+  });
+  rows.push([]);
+  
+  // Devices
+  rows.push(['Device Breakdown']);
+  rows.push(['Device', 'Count']);
+  rows.push(['Desktop', String(summary.deviceBreakdown.desktop)]);
+  rows.push(['Mobile', String(summary.deviceBreakdown.mobile)]);
+  rows.push(['Tablet', String(summary.deviceBreakdown.tablet)]);
+  
+  // Convert to CSV string
+  const csv = rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
+  
+  // Download
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `vtb-analytics-${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
