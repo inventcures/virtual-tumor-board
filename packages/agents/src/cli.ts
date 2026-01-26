@@ -15,6 +15,8 @@ import chalk from "chalk";
 import ora from "ora";
 import { TumorBoardOrchestrator } from "./orchestrator";
 import { AGENT_PERSONAS } from "./specialists";
+import { PalepuEvaluator } from "./evaluation/palepu-evaluator";
+import { VignetteGenerator } from "./simulation/vignette-generator";
 import type { CaseData, AgentId, DeliberationPhase } from "./types";
 
 // Load environment variables
@@ -96,6 +98,9 @@ program
   .option("-a, --agents <agents>", "Comma-separated list of agents to include")
   .option("-v, --verbose", "Enable verbose output")
   .option("--no-tools", "Disable tool use (faster, less grounded)")
+  .option("--reflective", "Enable Palepu/AMIE Reflective Agent Loop (Draft->Critique->Revise)")
+  .option("--generate <cancerType>", "Generate a synthetic case for this cancer type")
+  .option("--evaluate", "Run Palepu rubric evaluation on the result")
   .action(async (options) => {
     console.log(chalk.bold.blue(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -113,7 +118,20 @@ program
 
     // Load case data
     let caseData: CaseData;
-    if (options.demo) {
+    
+    if (options.generate) {
+      if (!process.env.GEMINI_API_KEY) {
+        console.log(chalk.red("Error: GEMINI_API_KEY required for synthetic case generation"));
+        process.exit(1);
+      }
+      console.log(chalk.cyan(`Generating synthetic ${options.generate} case (Palepu/AMIE style)...`));
+      const generator = new VignetteGenerator(process.env.GEMINI_API_KEY);
+      caseData = await generator.generate({ 
+        cancerType: options.generate, 
+        difficulty: "complex" 
+      });
+      console.log(chalk.green(`✓ Generated Case: ${caseData.id}\n`));
+    } else if (options.demo) {
       console.log(chalk.cyan("Using demo case: Stage IIIA NSCLC with KRAS G12C\n"));
       caseData = DEMO_CASE;
     } else if (options.case) {
@@ -174,6 +192,7 @@ program
     try {
       const result = await orchestrator.deliberate(caseData, {
         includeAgents: selectedAgents,
+        reflectiveConfig: options.reflective ? { enableSelfCritique: true, searchEnabled: true } : undefined,
         onPhaseChange: (phase: DeliberationPhase) => {
           phaseSpinner.stop();
           switch (phase) {
@@ -266,6 +285,35 @@ program
 
       console.log(chalk.gray("\n" + "─".repeat(60)));
       console.log(chalk.italic.gray("This is an AI-generated recommendation. Always verify with clinical judgment."));
+
+      if (options.evaluate && result.recommendation) {
+        console.log(chalk.bold.magenta("\n\n╔══════════════════════════════════════════════════════════════╗"));
+        console.log(chalk.bold.magenta("║              PALEPU RUBRIC EVALUATION (AUTO)                 ║"));
+        console.log(chalk.bold.magenta("╚══════════════════════════════════════════════════════════════╝\n"));
+        
+        if (!process.env.GEMINI_API_KEY) {
+           console.log(chalk.yellow("Skipping evaluation: GEMINI_API_KEY missing"));
+        } else {
+           const evaluator = new PalepuEvaluator(process.env.GEMINI_API_KEY);
+           process.stdout.write("Running auto-evaluation...");
+           const score = await evaluator.evaluate(caseData, result.recommendation);
+           console.log("\r");
+           
+           console.log(`Overall Score: ${chalk.bold(score.overallScore.toFixed(2))}/1.0`);
+           
+           console.log(chalk.bold("\n1. Management Reasoning"));
+           console.log(`   Standard of Care: ${score.managementReasoning.standardOfCare.toFixed(2)}`);
+           console.log(`   Critique: ${chalk.gray(score.managementReasoning.reasoning)}`);
+           
+           console.log(chalk.bold("\n2. Safety"));
+           console.log(`   Harmful: ${score.safety.harmful ? chalk.red("YES") : chalk.green("NO")}`);
+           console.log(`   Critique: ${chalk.gray(score.safety.reasoning)}`);
+           
+           console.log(chalk.bold("\n3. Completeness"));
+           console.log(`   Genetics: ${score.completeness.genetics ? "✅" : "❌"}`);
+           console.log(`   Psychosocial: ${score.completeness.psychosocial ? "✅" : "❌"}`);
+        }
+      }
 
     } catch (error) {
       phaseSpinner.fail("Deliberation failed");
