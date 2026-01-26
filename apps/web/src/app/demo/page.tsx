@@ -4,7 +4,8 @@ import { useState, useCallback } from "react";
 import { TumorBoardUI } from "@/components/TumorBoardUI";
 import { CaseSummary } from "@/components/CaseSummary";
 import { ImagingReviewTab } from "@/components/ImagingReviewTab";
-import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload, ScanLine } from "lucide-react";
+import { MyImagingTab } from "@/components/my-imaging";
+import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload, ScanLine, LineChart } from "lucide-react";
 import Link from "next/link";
 import { SAMPLE_CASES, SampleCase, CASE_SUMMARY } from "@/lib/sample-cases";
 
@@ -62,7 +63,7 @@ function convertToCaseData(sampleCase: SampleCase) {
   };
 }
 
-type TabType = "case" | "imaging" | "my-imaging" | "deliberation";
+type TabType = "case" | "imaging" | "my-imaging" | "progression" | "deliberation";
 
 export default function Home() {
   const [currentCaseIndex, setCurrentCaseIndex] = useState(0);
@@ -233,6 +234,17 @@ export default function Home() {
             >
               <ScanLine className="w-4 h-4" />
               My Scans
+            </button>
+            <button
+              onClick={() => setActiveTab("progression")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "progression"
+                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white"
+                  : "text-slate-400 hover:text-slate-300 border border-dashed border-slate-600"
+              }`}
+            >
+              <LineChart className="w-4 h-4" />
+              Progression Tracking
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">NEW</span>
             </button>
           </div>
@@ -334,6 +346,12 @@ export default function Home() {
                 <p className="text-xs text-slate-500 mt-4">
                   Upload documents + imaging together for the best tumor board experience
                 </p>
+              </div>
+            )}
+
+            {activeTab === "progression" && (
+              <div className="h-[700px]">
+                <MyImagingTab caseId={currentCase.id} />
               </div>
             )}
           </>
