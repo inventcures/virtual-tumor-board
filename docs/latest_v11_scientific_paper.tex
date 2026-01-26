@@ -560,7 +560,7 @@ where $d$ represents the longest diameter of target lesions, and new lesions aut
 
 \subsection{RAG Infrastructure}
 
-Our system indexes 174 clinical guideline documents across 7 authoritative sources:
+Our system indexes clinical guideline documents across 8 authoritative sources via Gemini File Search:
 
 \begin{figure}[H]
 \centering
@@ -570,35 +570,46 @@ Our system indexes 174 clinical guideline documents across 7 authoritative sourc
     width=10cm,
     height=6cm,
     xlabel={Number of Documents},
-    symbolic y coords={ClinVar, CIViC, ESMO, CAP, ASTRO, ACR, NCCN},
+    symbolic y coords={ClinVar, CIViC, SSO, ESMO, CAP, ASTRO, ACR, NCCN},
     ytick=data,
     nodes near coords,
     nodes near coords align={horizontal},
     xmin=0,
     bar width=0.5cm,
-    enlarge y limits=0.15
+    enlarge y limits=0.12
 ]
 \addplot[fill=accentteal!70] coordinates {
     (76,NCCN)
     (42,ACR)
     (20,ASTRO)
     (16,CAP)
+    (9,SSO)
     (8,ESMO)
     (7,CIViC)
     (5,ClinVar)
 };
 \end{axis}
 \end{tikzpicture}
-\caption{Distribution of indexed guideline documents by source. NCCN provides the largest corpus (76 documents) covering all major cancer types.}
+\caption{Distribution of indexed guideline documents by source. NCCN provides the largest corpus (76 documents). SSO (Society of Surgical Oncology) provides 9 documents for surgical oncology guidance.}
 \label{fig:rag-sources}
 \end{figure}
 
 Each agent has source-specific RAG configuration:
 
 \begin{itemize}[noitemsep]
+    \item \textbf{Surgical Oncologist}: Primary SSO, secondary NCCN (context: 10,000 tokens)
     \item \textbf{Medical Oncologist}: Primary NCCN, secondary ESMO (context: 12,000 tokens)
     \item \textbf{Radiation Oncologist}: Primary ASTRO, secondary NCCN (context: 8,000 tokens)
     \item \textbf{Geneticist}: Primary ClinVar, secondary CIViC (context: 6,000 tokens)
+\end{itemize}
+
+The SSO corpus includes 9 open-access clinical recommendations:
+\begin{itemize}[noitemsep]
+    \item Breast-Conserving Surgery Margins (SSO-ASTRO 2014)
+    \item Melanoma Gene Expression Profiling Consensus (2024)
+    \item Choosing Wisely: 5 Things to Question (2021)
+    \item Germline Testing in Breast Cancer (ASCO-SSO 2024)
+    \item Partial Breast Irradiation Perspectives (2024)
 \end{itemize}
 
 % ============================================================================
