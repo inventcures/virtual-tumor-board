@@ -26,6 +26,10 @@ const colorClasses: Record<string, { bg: string; border: string; text: string; l
   radiology: { bg: "bg-cyan-500", border: "border-cyan-500/30", text: "text-cyan-400", light: "bg-cyan-500/10" },
   pathology: { bg: "bg-pink-500", border: "border-pink-500/30", text: "text-pink-400", light: "bg-pink-500/10" },
   genetics: { bg: "bg-emerald-500", border: "border-emerald-500/30", text: "text-emerald-400", light: "bg-emerald-500/10" },
+  // V7 New Roles
+  critic: { bg: "bg-rose-600", border: "border-rose-500/50", text: "text-rose-400", light: "bg-rose-500/10" },
+  stewardship: { bg: "bg-teal-600", border: "border-teal-500/50", text: "text-teal-400", light: "bg-teal-500/10" },
+  moderator: { bg: "bg-slate-600", border: "border-slate-500/50", text: "text-indigo-400", light: "bg-slate-800" },
 };
 
 export function AgentCard({
@@ -82,16 +86,18 @@ export function AgentCard({
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Generating response...</span>
             </div>
-            <div className="prose-content max-h-48 overflow-y-auto pr-2 text-sm text-slate-300">
+            <div className="prose prose-invert prose-sm max-h-48 overflow-y-auto pr-2">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="text-sm text-slate-300 mb-2">{children}</p>,
-                  strong: ({ children }) => <strong className="text-white">{children}</strong>,
+                  p: ({ children }) => <p className="leading-relaxed mb-2">{children}</p>,
+                  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                  ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                  li: ({ children }) => <li className="text-slate-300">{children}</li>,
                 }}
               >
                 {response.response}
               </ReactMarkdown>
-              <span className="inline-block w-2 h-4 bg-amber-400 animate-pulse ml-1" />
+              <span className="inline-block w-1.5 h-4 bg-amber-400 animate-pulse ml-1 align-middle" />
             </div>
           </div>
         </div>
