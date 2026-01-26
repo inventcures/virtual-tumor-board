@@ -105,7 +105,7 @@ export const GUIDELINE_SOURCES: Record<GuidelineSource, GuidelineSourceInfo> = {
     itemCount: 5,
     description: "Society of Surgical Oncology clinical recommendations and consensus statements",
     citationFormat: "SSO {topic} {year}",
-    fileSearchStoreId: "ssoguidelinesrag-pending", // Will be updated after Gemini File Search store creation
+    fileSearchStoreId: "sso-surgical-oncology-guide-r0o89zpazglb",
   },
 };
 

@@ -23,7 +23,7 @@ const FILE_SEARCH_STORES: Record<GuidelineSource, string> = {
   cap: process.env.FILE_SEARCH_CAP || "capcancerprotocolsrag-55nmm2prh0xs",
   clinvar: process.env.FILE_SEARCH_GENOMICS || "clinvarcivicgenomicsrag-uat87mzcqtum",
   civic: process.env.FILE_SEARCH_GENOMICS || "clinvarcivicgenomicsrag-uat87mzcqtum",
-  sso: process.env.FILE_SEARCH_SSO || "ssoguidelinesrag-pending", // SSO: Pending File Search store creation
+  sso: process.env.FILE_SEARCH_SSO || "sso-surgical-oncology-guide-r0o89zpazglb",
 };
 
 /**
