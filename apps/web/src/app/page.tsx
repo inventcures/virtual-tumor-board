@@ -316,7 +316,7 @@ export default function LandingPage() {
               exploring AI-assisted tumor boards, I'd love to hear from you.
             </p>
             <a 
-              href="mailto:spiff007@gmail.com?subject=Interested%20in%20piloting%20AI%20tumor%20board%20tool"
+              href="mailto:spiff007@gmail.com?cc=tp53@aitumorboardcancer.org&subject=Interested%20in%20piloting%20AI%20tumor%20board%20tool"
               className="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium border border-slate-700 hover:border-slate-600 transition-all"
             >
               <Mail className="w-5 h-5" />
