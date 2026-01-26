@@ -201,7 +201,7 @@ function ComparisonPanel({
     });
   };
 
-  // Generate synthetic image data for demo
+  // Generate synthetic image data for demo - slice-dependent
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -212,49 +212,171 @@ function ComparisonPanel({
     const width = canvas.width;
     const height = canvas.height;
     
-    // Generate synthetic CT-like image
+    // Seeded random for consistent but varying slices
+    const seededRandom = (seed: number) => {
+      const x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
+    };
+    
+    // Generate synthetic CT-like image that varies with slice
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
+    
+    const cx = width / 2;
+    const cy = height / 2;
+    
+    // Slice-dependent parameters (simulating anatomical changes through body)
+    const sliceNorm = currentSlice / (timepoint.totalSlices - 1); // 0 to 1
+    
+    // Body cross-section varies - smaller at top/bottom of scan
+    const sliceFromCenter = Math.abs(sliceNorm - 0.5) * 2; // 0 at center, 1 at edges
+    const bodyRadiusModifier = 1 - sliceFromCenter * 0.3;
+    const bodyRadius = Math.min(width, height) * 0.4 * bodyRadiusModifier;
+    
+    // Organ positions shift with slice
+    const liverVisible = sliceNorm > 0.3 && sliceNorm < 0.7;
+    const lungVisible = sliceNorm > 0.2 && sliceNorm < 0.6;
+    const heartVisible = sliceNorm > 0.25 && sliceNorm < 0.45;
+    
+    // Tumor visibility depends on slice (tumor is at specific z-level)
+    const tumorSliceCenter = 0.45; // Tumor centered at slice 45%
+    const tumorSliceWidth = 0.15;
+    const tumorVisibility = Math.max(0, 1 - Math.abs(sliceNorm - tumorSliceCenter) / tumorSliceWidth);
     
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const idx = (y * width + x) * 4;
-        
-        // Create circular body shape
-        const cx = width / 2;
-        const cy = height / 2;
         const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-        const bodyRadius = Math.min(width, height) * 0.4;
+        
+        // Use seeded random for deterministic noise pattern per slice
+        const noiseSeed = x * 1000 + y + currentSlice * 10000;
+        const noise = seededRandom(noiseSeed) * 15;
         
         let value = 0;
         
         if (dist < bodyRadius) {
-          // Inside body - soft tissue (slightly varying)
-          value = 80 + Math.random() * 20 + Math.sin(x / 10 + y / 10) * 10;
+          // Inside body - base soft tissue
+          value = 75 + noise + Math.sin(x / 8 + y / 8 + currentSlice / 3) * 8;
           
-          // Add some "organs" - darker regions
-          const organDist = Math.sqrt((x - cx * 0.7) ** 2 + (y - cy * 0.8) ** 2);
-          if (organDist < bodyRadius * 0.3) {
-            value = 60 + Math.random() * 15;
+          // Right lung (dark air pocket) - varies with slice
+          if (lungVisible) {
+            const lungRx = cx + 35;
+            const lungRy = cy - 25 + (sliceNorm - 0.4) * 30;
+            const lungRDist = Math.sqrt((x - lungRx) ** 2 + (y - lungRy) ** 2);
+            const lungRRadius = 35 * (1 - Math.abs(sliceNorm - 0.4) * 1.5);
+            if (lungRDist < lungRRadius && lungRRadius > 10) {
+              value = 20 + noise * 0.5;
+            }
           }
           
-          // Add spine region
-          if (Math.abs(x - cx) < 15 && y > cy) {
-            value = 200 + Math.random() * 30; // Bone is bright
+          // Left lung
+          if (lungVisible) {
+            const lungLx = cx - 40;
+            const lungLy = cy - 25 + (sliceNorm - 0.4) * 30;
+            const lungLDist = Math.sqrt((x - lungLx) ** 2 + (y - lungLy) ** 2);
+            const lungLRadius = 32 * (1 - Math.abs(sliceNorm - 0.4) * 1.5);
+            if (lungLDist < lungLRadius && lungLRadius > 10) {
+              value = 20 + noise * 0.5;
+            }
           }
           
-          // Add synthetic "tumor" that changes size based on assessment
-          const tumorCx = cx + 40;
-          const tumorCy = cy - 20;
-          // Tumor size decreases with negative percent change
-          const tumorRadius = 25 * (1 + percentChange / 100);
-          const tumorDist = Math.sqrt((x - tumorCx) ** 2 + (y - tumorCy) ** 2);
-          if (tumorDist < tumorRadius && tumorRadius > 5) {
-            value = 120 + Math.random() * 20;
+          // Heart (medium density, oval shape)
+          if (heartVisible) {
+            const heartX = cx - 10;
+            const heartY = cy - 15;
+            const heartDistX = (x - heartX) / 25;
+            const heartDistY = (y - heartY) / 30;
+            const heartDist = Math.sqrt(heartDistX ** 2 + heartDistY ** 2);
+            if (heartDist < 1) {
+              value = 90 + noise;
+            }
           }
+          
+          // Liver (right side, lower) - larger organ
+          if (liverVisible) {
+            const liverX = cx + 30;
+            const liverY = cy + 25 - (sliceNorm - 0.5) * 40;
+            const liverDistX = (x - liverX) / 45;
+            const liverDistY = (y - liverY) / 35;
+            const liverDist = Math.sqrt(liverDistX ** 2 + liverDistY ** 2);
+            if (liverDist < 1) {
+              value = 95 + noise;
+            }
+          }
+          
+          // Spine - vertebral body (bright bone, position shifts with slice)
+          const spineWidth = 18 + Math.sin(currentSlice / 5) * 3;
+          const spineOffset = Math.sin(currentSlice / 8) * 5; // Slight S-curve
+          if (Math.abs(x - cx - spineOffset) < spineWidth && y > cy + 20) {
+            // Vertebral body
+            value = 180 + noise;
+            // Spinal canal (dark center)
+            if (Math.abs(x - cx - spineOffset) < 5 && y > cy + 25 && y < cy + 45) {
+              value = 30;
+            }
+          }
+          
+          // Ribs (arcs on sides, visible in certain slices)
+          if (sliceNorm > 0.2 && sliceNorm < 0.65) {
+            const ribAngle = (currentSlice % 10) / 10 * Math.PI * 0.3;
+            for (let rib = -2; rib <= 2; rib++) {
+              const ribY = cy + rib * 20;
+              const ribCurve = Math.sin((x - cx) / 50) * 15;
+              if (Math.abs(y - ribY - ribCurve) < 4 && Math.abs(x - cx) > 50 && Math.abs(x - cx) < 90) {
+                value = 170 + noise;
+              }
+            }
+          }
+          
+          // TUMORS - these change size based on assessment (treatment response)
+          // Primary tumor in liver
+          if (tumorVisibility > 0.3) {
+            const tumorCx = cx + 45;
+            const tumorCy = cy + 15;
+            // Tumor size decreases with negative percent change (treatment response)
+            const baseRadius = 22;
+            const tumorRadius = baseRadius * (1 + percentChange / 100) * tumorVisibility;
+            const tumorDist = Math.sqrt((x - tumorCx) ** 2 + (y - tumorCy) ** 2);
+            if (tumorDist < tumorRadius && tumorRadius > 3) {
+              // Tumor has heterogeneous density
+              const tumorNoise = seededRandom(x * y + currentSlice) * 20;
+              value = 110 + tumorNoise;
+              // Necrotic center (darker)
+              if (tumorDist < tumorRadius * 0.4) {
+                value = 70 + tumorNoise * 0.5;
+              }
+            }
+          }
+          
+          // Secondary tumor (lung nodule) - smaller
+          const lungTumorSlice = 0.38;
+          const lungTumorVis = Math.max(0, 1 - Math.abs(sliceNorm - lungTumorSlice) / 0.1);
+          if (lungTumorVis > 0.3) {
+            const ltCx = cx + 50;
+            const ltCy = cy - 35;
+            const ltRadius = 12 * (1 + percentChange / 100) * lungTumorVis;
+            const ltDist = Math.sqrt((x - ltCx) ** 2 + (y - ltCy) ** 2);
+            if (ltDist < ltRadius && ltRadius > 2) {
+              value = 100 + noise;
+            }
+          }
+          
+          // Mediastinal lymph node
+          const lnSlice = 0.35;
+          const lnVis = Math.max(0, 1 - Math.abs(sliceNorm - lnSlice) / 0.08);
+          if (lnVis > 0.3) {
+            const lnCx = cx - 5;
+            const lnCy = cy - 50;
+            const lnRadius = 10 * (1 + percentChange / 100) * lnVis;
+            const lnDist = Math.sqrt((x - lnCx) ** 2 + (y - lnCy) ** 2);
+            if (lnDist < lnRadius && lnRadius > 2) {
+              value = 85 + noise;
+            }
+          }
+          
         } else {
-          // Outside body - air (dark)
-          value = 10 + Math.random() * 10;
+          // Outside body - air (dark with slight noise)
+          value = 8 + noise * 0.3;
         }
         
         // Apply window/level
@@ -274,10 +396,10 @@ function ComparisonPanel({
     if (showMeasurements) {
       measurements.forEach(m => {
         const isHighlighted = m.lesion.id === highlightedLesionId;
-        drawLesionAnnotation(ctx, m, isHighlighted, width, height);
+        drawLesionAnnotation(ctx, m, isHighlighted, width, height, currentSlice, timepoint.totalSlices);
       });
     }
-  }, [timepoint, sliceProgress, settings, measurements, showMeasurements, highlightedLesionId, percentChange]);
+  }, [timepoint, currentSlice, settings, measurements, showMeasurements, highlightedLesionId, percentChange]);
 
   return (
     <div 
@@ -468,11 +590,20 @@ function drawLesionAnnotation(
   measurement: LesionMeasurement & { lesion: TrackedLesion },
   isHighlighted: boolean,
   width: number,
-  height: number
+  height: number,
+  currentSlice?: number,
+  totalSlices?: number
 ) {
-  const { lesion, longAxis, annotationCoords } = measurement;
+  const { lesion, longAxis, annotationCoords, sliceNumber } = measurement;
   
   if (annotationCoords.length < 2) return;
+  
+  // Only show annotation if we're on or near the correct slice
+  if (currentSlice !== undefined && sliceNumber !== undefined && totalSlices) {
+    const sliceDiff = Math.abs(currentSlice - sliceNumber);
+    // Show annotation within 5 slices of the actual measurement slice
+    if (sliceDiff > 5) return;
+  }
   
   // Scale coordinates to canvas size
   const scale = Math.min(width, height) / 256;
@@ -482,11 +613,18 @@ function drawLesionAnnotation(
   const x2 = p2.x * scale;
   const y2 = p2.y * scale;
   
+  // Fade annotation based on distance from measurement slice
+  let opacity = 1;
+  if (currentSlice !== undefined && sliceNumber !== undefined) {
+    const sliceDiff = Math.abs(currentSlice - sliceNumber);
+    opacity = Math.max(0.3, 1 - sliceDiff / 5);
+  }
+  
   // Draw measurement line
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
-  ctx.strokeStyle = isHighlighted ? '#FBBF24' : lesion.color;
+  ctx.strokeStyle = isHighlighted ? `rgba(251, 191, 36, ${opacity})` : hexToRgba(lesion.color, opacity);
   ctx.lineWidth = isHighlighted ? 3 : 2;
   ctx.stroke();
   
@@ -494,7 +632,7 @@ function drawLesionAnnotation(
   ctx.beginPath();
   ctx.arc(x1, y1, 3, 0, Math.PI * 2);
   ctx.arc(x2, y2, 3, 0, Math.PI * 2);
-  ctx.fillStyle = isHighlighted ? '#FBBF24' : lesion.color;
+  ctx.fillStyle = isHighlighted ? `rgba(251, 191, 36, ${opacity})` : hexToRgba(lesion.color, opacity);
   ctx.fill();
   
   // Draw label
@@ -502,7 +640,15 @@ function drawLesionAnnotation(
   const midY = (y1 + y2) / 2 - 10;
   
   ctx.font = '10px sans-serif';
-  ctx.fillStyle = isHighlighted ? '#FBBF24' : '#FFFFFF';
+  ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
   ctx.textAlign = 'center';
   ctx.fillText(`${lesion.name}: ${longAxis}mm`, midX, midY);
+}
+
+// Helper to convert hex color to rgba
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
