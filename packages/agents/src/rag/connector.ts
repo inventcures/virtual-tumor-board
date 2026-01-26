@@ -16,12 +16,14 @@ import { GUIDELINE_SOURCES } from "./types";
  */
 const FILE_SEARCH_STORES: Record<GuidelineSource, string> = {
   nccn: process.env.FILE_SEARCH_NCCN || "nccnguidelinesrag-4ffdfolxso0s",
+  "nccn-resource-stratified": process.env.FILE_SEARCH_NCCN || "nccnguidelinesrag-4ffdfolxso0s", // Same as NCCN for now
   esmo: process.env.FILE_SEARCH_ESMO || "esmoguidelinesen-4tjmgeq3y1h8",
   astro: process.env.FILE_SEARCH_ASTRO || "astroguidelinesrag-xanee0h0rgpp",
   acr: process.env.FILE_SEARCH_ACR || "acrradiologyguidelinesrag-qt98zl8un2ht",
   cap: process.env.FILE_SEARCH_CAP || "capcancerprotocolsrag-55nmm2prh0xs",
   clinvar: process.env.FILE_SEARCH_GENOMICS || "clinvarcivicgenomicsrag-uat87mzcqtum",
   civic: process.env.FILE_SEARCH_GENOMICS || "clinvarcivicgenomicsrag-uat87mzcqtum",
+  sso: process.env.FILE_SEARCH_SSO || "ssoguidelinesrag-pending", // SSO: Pending File Search store creation
 };
 
 /**
@@ -405,6 +407,74 @@ First-line by biomarker:
 - Evidence Direction: Supports Sensitivity
 [CIViC EID:6955]`,
         overview: `CIViC (Clinical Interpretation of Variants in Cancer) provides crowd-sourced, expert-curated clinical interpretations of cancer variants.`,
+      },
+      sso: {
+        surgical: `SSO Surgical Oncology Principles:
+- Adequate margins are critical for oncologic outcomes
+- Lymph node assessment per disease-specific protocols
+- Consider neoadjuvant therapy for borderline resectable tumors
+- Minimally invasive approaches when oncologically appropriate
+- Multidisciplinary tumor board discussion for complex cases
+[SSO Clinical Recommendations]`,
+        breast: `SSO Breast Surgery Recommendations:
+- Breast-conserving surgery (BCS) with negative margins preferred for early-stage
+- Negative margin = no ink on tumor (SSO-ASTRO consensus 2014)
+- DCIS margins: 2mm preferred (SSO-ASTRO-ASCO consensus 2016)
+- Contralateral prophylactic mastectomy: Consider for BRCA1/2, strong family history
+- Sentinel lymph node biopsy standard for clinically node-negative
+- Axillary management: SLNB alone if 1-2 positive nodes + BCS + whole breast RT + systemic therapy
+[SSO-ASTRO Margin Consensus Guidelines]`,
+        melanoma: `SSO Melanoma Surgery Recommendations:
+- Wide local excision margins based on Breslow thickness:
+  * In situ: 0.5-1cm margin
+  * <1mm: 1cm margin
+  * 1-2mm: 1-2cm margin
+  * >2mm: 2cm margin
+- Sentinel lymph node biopsy: Recommended for tumors >=0.8mm or with ulceration
+- Gene expression profiling (GEP): NOT recommended for routine clinical decision-making (SSO 2024)
+- GEP should not be used to select patients for SLNB
+- Completion lymph node dissection: Consider based on tumor burden in SLN
+[SSO Melanoma Disease-Site Work Group Consensus 2024]`,
+        colorectal: `SSO Colorectal Surgery Recommendations:
+- Complete mesocolic excision (CME) for colon cancer
+- Total mesorectal excision (TME) for rectal cancer - sharp dissection in holy plane
+- Circumferential resection margin (CRM) >1mm required for rectal cancer
+- Minimum 12 lymph nodes for adequate staging
+- Watch-and-wait/organ preservation: Consider for clinical complete response after chemoRT
+- Transanal approaches (taTME, TAMIS) for select low rectal tumors
+[SSO-ASTRO Rectal Cancer Radiation Guidelines]`,
+        lung: `SSO Thoracic Surgical Oncology:
+- Lobectomy with systematic lymph node dissection is standard for resectable NSCLC
+- Segmentectomy acceptable for peripheral tumors <=2cm with adequate margins
+- VATS/robotic approaches preferred when feasible - equivalent oncologic outcomes
+- Minimum N2 sampling: stations 2R, 4R, 7, 8, 9 (right); 4L, 5, 6, 7, 8, 9 (left)
+- Sleeve resection preferred over pneumonectomy when feasible
+- Post-operative RT for N2 disease: per ASTRO-SSO guidelines
+[SSO Thoracic Oncology Principles]`,
+        gastric: `SSO Gastric Surgery Recommendations:
+- D2 lymphadenectomy recommended for resectable gastric cancer (>=15 nodes)
+- D1 acceptable in Western centers with lower volume
+- Margins: >=4cm for intestinal type, >=8cm for diffuse type
+- Proximal margin more critical than distal
+- Peritoneal cytology should be performed
+- Staging laparoscopy recommended for cT3-4 or node-positive
+[SSO D2 Lymphadenectomy Consensus 2024]`,
+        pmrt: `SSO-ASTRO-ASCO Post-Mastectomy Radiation Therapy (PMRT) Guidelines 2025:
+- PMRT recommended for: >=4 positive nodes, T3-4 tumors, positive margins
+- PMRT generally recommended for 1-3 positive nodes (shared decision-making)
+- Regional nodal irradiation should include supraclavicular and internal mammary nodes
+- Timing: Can begin 4-8 weeks after mastectomy if no reconstruction complications
+- With immediate reconstruction: Discuss with reconstructive surgeon
+- Hypofractionation acceptable: 42.5 Gy/16 fractions or 40 Gy/15 fractions
+[SSO-ASTRO-ASCO PMRT Clinical Practice Guideline 2025]`,
+        choosing_wisely: `SSO Choosing Wisely - 5 Things Physicians and Patients Should Question:
+1. Do not perform routine sentinel lymph node biopsy in clinically node-negative breast cancer patients >= 70 years with ER+/HER2- tumors
+2. Do not routinely use MRI for breast cancer staging in patients planned for breast-conserving surgery
+3. Do not routinely perform contralateral prophylactic mastectomy in average-risk women with unilateral breast cancer
+4. Do not perform completion axillary lymph node dissection for micrometastatic disease in sentinel lymph node
+5. Do not use gene expression profiling tests in melanoma to select patients for SLNB
+[SSO Choosing Wisely 2021]`,
+        overview: `Society of Surgical Oncology (SSO) provides evidence-based clinical recommendations for surgical management of solid tumors. SSO collaborates with ASCO, ASTRO, and other societies on multidisciplinary guidelines. Key principles: adequate margins, appropriate lymphadenectomy, minimally invasive when oncologically safe, multidisciplinary planning. SSO Clinical Recommendations available at surgonc.org.`,
       },
     };
 

@@ -43,6 +43,14 @@ export const GUIDELINE_SOURCES: Record<GuidelineSource, GuidelineSourceInfo> = {
     citationFormat: "NCCN {cancer_type} v{version}, {section}",
     fileSearchStoreId: "nccnguidelinesrag-4ffdfolxso0s",
   },
+  "nccn-resource-stratified": {
+    id: "nccn-resource-stratified",
+    name: "NCCN Resource-Stratified Guidelines",
+    itemCount: 67,
+    description: "NCCN guidelines adapted for resource-constrained settings",
+    citationFormat: "NCCN Resource-Stratified {cancer_type} v{version}, {section}",
+    fileSearchStoreId: "nccnguidelinesrag-4ffdfolxso0s", // Same store for now
+  },
   esmo: {
     id: "esmo",
     name: "ESMO Clinical Practice Guidelines",
@@ -90,6 +98,14 @@ export const GUIDELINE_SOURCES: Record<GuidelineSource, GuidelineSourceInfo> = {
     description: "Clinical Interpretation of Variants in Cancer (shared with ClinVar)",
     citationFormat: "CIViC EID{evidence_id}: {gene} {variant}",
     fileSearchStoreId: "clinvarcivicgenomicsrag-uat87mzcqtum",
+  },
+  sso: {
+    id: "sso",
+    name: "SSO Clinical Recommendations",
+    itemCount: 5,
+    description: "Society of Surgical Oncology clinical recommendations and consensus statements",
+    citationFormat: "SSO {topic} {year}",
+    fileSearchStoreId: "ssoguidelinesrag-pending", // Will be updated after Gemini File Search store creation
   },
 };
 

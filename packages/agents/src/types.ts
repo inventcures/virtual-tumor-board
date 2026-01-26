@@ -37,7 +37,8 @@ export type GuidelineSource =
   | "acr"
   | "cap"
   | "clinvar"
-  | "civic";
+  | "civic"
+  | "sso"; // Society of Surgical Oncology
 
 export interface AgentPersona {
   id: AgentId;

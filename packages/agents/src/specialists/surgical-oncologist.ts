@@ -9,8 +9,8 @@ export const SURGICAL_ONCOLOGIST: AgentPersona = {
   name: "Dr. Shalya",
   specialty: "Surgical Oncology",
   personality: "Pragmatic, outcomes-focused, considers functional preservation",
-  primaryGuideline: "nccn",
-  secondaryGuidelines: [],
+  primaryGuideline: "sso",      // Changed: SSO as primary for surgical oncology
+  secondaryGuidelines: ["nccn"], // NCCN as secondary for comprehensive coverage
   domains: ["surgical_resectability"],
   evaluationFramework: [
     "RESECTABILITY: Is this surgically resectable? R0 possible?",
@@ -84,5 +84,7 @@ Provide your surgical assessment including:
 5. Alternative options if surgery not primary choice
 6. Indian context-specific recommendations
 
-Ground ALL recommendations in NCCN guidelines with specific citations.
+Ground ALL recommendations in SSO Clinical Recommendations and NCCN guidelines with specific citations.
+SSO guidelines take precedence for surgical-specific questions (margins, lymphadenectomy, technique).
+NCCN guidelines inform overall treatment sequencing and systemic therapy integration.
 If deviating from guidelines, explain the rationale clearly.`;
