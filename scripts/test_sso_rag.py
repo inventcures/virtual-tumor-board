@@ -62,7 +62,7 @@ def test_query(query: str, expected_keywords: list) -> dict:
     try:
         # Use Gemini with File Search grounding
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3-flash-preview",  # File Search requires gemini-3-flash-preview
             contents=query,
             config=types.GenerateContentConfig(
                 tools=[
