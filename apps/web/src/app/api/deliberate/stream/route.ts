@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { 
   getCachedDeliberation, 
   streamCachedDeliberation,
+  streamV18Deliberation,
   isCaseCached,
   cacheDeliberation,
   CachedDeliberation,
@@ -439,6 +440,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const caseId = searchParams.get("caseId") || "lung-nsclc-kras-g12c";
   const forceRefresh = searchParams.get("refresh") === "true";
+  const useV18Format = searchParams.get("v18") === "true";
   
   const encoder = new TextEncoder();
   
@@ -486,10 +488,14 @@ export async function GET(request: NextRequest) {
         caseId: deliberation!.caseId,
         caseNumber: deliberation!.caseNumber,
         isCached: isCaseCached(caseId),
+        format: useV18Format ? "v18" : "legacy",
       });
       controller.enqueue(encoder.encode(`data: ${caseInfo}\n\n`));
       
-      const generator = streamCachedDeliberation(deliberation!);
+      // Use V18 streaming format for new deliberation stream UI
+      const generator = useV18Format 
+        ? streamV18Deliberation(deliberation!)
+        : streamCachedDeliberation(deliberation!);
       
       for (const event of generator) {
         const data = JSON.stringify({ type: event.type, ...event.data });

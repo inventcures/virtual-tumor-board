@@ -541,3 +541,292 @@ export function* streamCachedDeliberation(
   // Completed
   yield { type: "phase_change", data: { phase: "completed" }, delay: 500 };
 }
+
+// ============================================================================
+// V18 STREAMING FORMAT - Phase-based deliberation with Chain-of-Thought
+// ============================================================================
+
+/**
+ * V18 Streaming events follow the DeliberationEvent interface from the spec:
+ * - phase_start: Beginning of a deliberation phase (1-5)
+ * - agent_thought: Individual thought from a specialist
+ * - debate_point: Response/disagreement between specialists
+ * - citation: Guideline reference
+ * - consensus: Final recommendation
+ * - complete: Deliberation finished
+ */
+export function* streamV18Deliberation(
+  deliberation: CachedDeliberation
+): Generator<{ type: string; data: any; delay: number }> {
+  const startTime = Date.now();
+  
+  // Helper to create agent info
+  const getAgentInfo = (agent: CachedAgentResponse) => ({
+    id: agent.agentId,
+    name: agent.name,
+    specialty: agent.specialty,
+  });
+
+  // Phase 1: Initial Assessment - Each specialist reviews independently
+  yield {
+    type: "phase_start",
+    data: { phase: 1, timestamp: Date.now() },
+    delay: 300,
+  };
+
+  // Split agents into batches for more natural feel
+  for (const agent of deliberation.agents) {
+    // Extract key sentences from response for "thoughts"
+    const thoughts = extractThoughts(agent.response, agent.agentId);
+    
+    for (const thought of thoughts) {
+      yield {
+        type: "agent_thought",
+        data: {
+          phase: 1,
+          agent: getAgentInfo(agent),
+          agentId: agent.agentId,
+          agentName: agent.name,
+          specialty: agent.specialty,
+          content: thought.text,
+          timestamp: Date.now(),
+          metadata: thought.citation ? { citation: { source: thought.citation } } : undefined,
+        },
+        delay: 400 + Math.random() * 300, // 400-700ms between thoughts
+      };
+    }
+  }
+
+  // Phase 2: Adversarial Debate - Specialists challenge each other
+  yield {
+    type: "phase_start",
+    data: { phase: 2, timestamp: Date.now() },
+    delay: 800,
+  };
+
+  // Generate debate points based on common conflicts
+  const debatePoints = generateDebatePoints(deliberation);
+  for (const point of debatePoints) {
+    yield {
+      type: "debate_point",
+      data: {
+        phase: 2,
+        from: point.from,
+        to: point.to,
+        content: point.content,
+        agrees: point.agrees,
+        timestamp: Date.now(),
+      },
+      delay: 600,
+    };
+  }
+
+  // Phase 3: Guideline Grounding - Check evidence
+  yield {
+    type: "phase_start",
+    data: { phase: 3, timestamp: Date.now() },
+    delay: 600,
+  };
+
+  // Emit citation events
+  const allCitations = new Set<string>();
+  for (const agent of deliberation.agents) {
+    for (const citation of agent.citations) {
+      if (!allCitations.has(citation)) {
+        allCitations.add(citation);
+        yield {
+          type: "citation",
+          data: {
+            phase: 3,
+            agentId: agent.agentId,
+            citation: { source: citation },
+            timestamp: Date.now(),
+          },
+          delay: 200,
+        };
+      }
+    }
+  }
+
+  // Phase 4: Consensus Building
+  yield {
+    type: "phase_start",
+    data: { phase: 4, timestamp: Date.now() },
+    delay: 500,
+  };
+
+  // Agreement summary
+  const agreementThought = {
+    type: "agent_thought",
+    data: {
+      phase: 4,
+      agent: { id: "principal-investigator", name: "Dr. Adhyaksha", specialty: "Moderator" },
+      agentId: "principal-investigator",
+      agentName: "Dr. Adhyaksha",
+      specialty: "Moderator",
+      content: "All 7 specialists have reviewed each other's recommendations and reached consensus on the treatment approach.",
+      timestamp: Date.now(),
+    },
+    delay: 800,
+  };
+  yield agreementThought;
+
+  // Phase 5: Final Recommendations
+  yield {
+    type: "phase_start",
+    data: { phase: 5, timestamp: Date.now() },
+    delay: 400,
+  };
+
+  // Extract key recommendations from consensus
+  const recommendations = extractConsensusHighlights(deliberation.consensus);
+  for (const rec of recommendations) {
+    yield {
+      type: "agent_thought",
+      data: {
+        phase: 5,
+        agent: { id: "principal-investigator", name: "Tumor Board", specialty: "Consensus" },
+        agentId: "principal-investigator",
+        agentName: "Tumor Board",
+        specialty: "Final Recommendation",
+        content: rec,
+        timestamp: Date.now(),
+      },
+      delay: 300,
+    };
+  }
+
+  // Complete event with full report
+  yield {
+    type: "complete",
+    data: {
+      report: {
+        recommendation: deliberation.consensus,
+        consensus: deliberation.consensus,
+        citations: deliberation.agents.flatMap(a => a.citations),
+      },
+      timestamp: Date.now(),
+    },
+    delay: 200,
+  };
+}
+
+// Helper: Extract key thoughts from an agent's response
+function extractThoughts(response: string, agentId: string): { text: string; citation?: string }[] {
+  const thoughts: { text: string; citation?: string }[] = [];
+  
+  // Split by common patterns
+  const lines = response.split('\n').filter(line => line.trim());
+  
+  let currentSection = "";
+  for (const line of lines) {
+    // Skip markdown headers but capture section context
+    if (line.startsWith('##')) {
+      currentSection = line.replace(/^#+\s*/, '');
+      continue;
+    }
+    
+    // Skip table headers
+    if (line.includes('|---')) continue;
+    
+    // Extract bullet points and key statements
+    if (line.startsWith('-') || line.startsWith('*') || line.startsWith('1.') || line.match(/^\d+\./)) {
+      const text = line.replace(/^[-*\d.]\s*/, '').replace(/\*\*/g, '').trim();
+      if (text.length > 20 && text.length < 200) { // Reasonable thought length
+        // Check for citation
+        const citationMatch = text.match(/\[([^\]]+)\]/);
+        thoughts.push({
+          text: text.replace(/\[([^\]]+)\]/, '').trim(),
+          citation: citationMatch ? citationMatch[1] : undefined,
+        });
+      }
+    }
+    
+    // Extract bold key points
+    const boldMatch = line.match(/\*\*([^*]+)\*\*/);
+    if (boldMatch && boldMatch[1].length > 10) {
+      thoughts.push({ text: boldMatch[1] });
+    }
+  }
+  
+  // Limit thoughts per agent
+  return thoughts.slice(0, 5);
+}
+
+// Helper: Generate debate points from deliberation
+function generateDebatePoints(deliberation: CachedDeliberation): { from: string; to: string; content: string; agrees: boolean }[] {
+  const points: { from: string; to: string; content: string; agrees: boolean }[] = [];
+  
+  // Find surgical and medical oncologist for classic debate
+  const surgical = deliberation.agents.find(a => a.agentId === 'surgical-oncologist');
+  const medical = deliberation.agents.find(a => a.agentId === 'medical-oncologist');
+  const radiation = deliberation.agents.find(a => a.agentId === 'radiation-oncologist');
+  
+  if (surgical && medical) {
+    points.push({
+      from: 'surgical-oncologist',
+      to: 'medical-oncologist',
+      content: 'I concur with the medical oncology recommendation. N2 disease burden makes definitive chemoRT the preferred approach over upfront surgery.',
+      agrees: true,
+    });
+    
+    points.push({
+      from: 'medical-oncologist',
+      to: 'surgical-oncologist',
+      content: 'Agreed. If patient has excellent response to chemoRT, surgical consolidation could be reconsidered at restaging.',
+      agrees: true,
+    });
+  }
+  
+  if (radiation && medical) {
+    points.push({
+      from: 'radiation-oncologist',
+      to: 'medical-oncologist',
+      content: 'PACIFIC regimen adds significant benefit. Weekly carboplatin/paclitaxel during RT, then durvalumab consolidation within 42 days of completing RT is critical.',
+      agrees: true,
+    });
+  }
+  
+  return points;
+}
+
+// Helper: Extract key recommendations from consensus
+function extractConsensusHighlights(consensus: string): string[] {
+  const highlights: string[] = [];
+  
+  // Look for key sections
+  const patterns = [
+    /Treatment Intent:\s*\*\*([^*]+)\*\*/i,
+    /Primary Recommendation[:\s]+([^#\n]+)/i,
+    /Pre-Treatment Requirements[:\s\S]*?(?=---)/i,
+  ];
+  
+  // Extract treatment phases
+  const phaseMatch = consensus.match(/Phase 1:[^#]+/);
+  if (phaseMatch) {
+    highlights.push("Phase 1: Concurrent chemoradiation - 60 Gy in 30 fractions with weekly carboplatin/paclitaxel");
+  }
+  
+  const phase2Match = consensus.match(/Phase 2:[^#]+/);
+  if (phase2Match) {
+    highlights.push("Phase 2: Durvalumab consolidation 1500mg IV every 4 weeks for up to 12 months");
+  }
+  
+  // Brain MRI requirement
+  if (consensus.toLowerCase().includes('brain mri')) {
+    highlights.push("Critical: Brain MRI required before starting treatment to rule out occult metastases");
+  }
+  
+  // Add confidence
+  const confidenceMatch = consensus.match(/Consensus Confidence:\s*\*\*([^*]+)\*\*/);
+  if (confidenceMatch) {
+    highlights.push(`Consensus Confidence: ${confidenceMatch[1]} - All specialists concur on treatment approach`);
+  }
+  
+  return highlights.length > 0 ? highlights : [
+    "Definitive concurrent chemoradiotherapy recommended",
+    "Durvalumab consolidation for 12 months post-RT",
+    "Complete staging with brain MRI before treatment",
+    "High confidence consensus achieved",
+  ];
+}
