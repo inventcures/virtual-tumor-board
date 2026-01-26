@@ -19,7 +19,12 @@ import type {
 import { AGENT_PERSONAS, DEFAULT_AGENTS } from "../specialists";
 import { AGENT_TOOLS } from "../tools";
 import { executeToolCall } from "../tools/executor";
-import { getAgentSystemPrompt } from "./prompts";
+import { 
+  getAgentSystemPrompt, 
+  getReflectiveDraftPrompt, 
+  getCritiquePrompt, 
+  getRevisionPrompt 
+} from "./prompts";
 import { formatCaseContext } from "./case-formatter";
 
 export interface OrchestratorConfig {
@@ -189,7 +194,15 @@ export class TumorBoardOrchestrator {
 
     // Execute agent consultations in parallel
     const consultations = agents.map(async (agentId) => {
-      const response = await this.consultAgent(agentId, caseData, options);
+      let response: AgentResponse;
+      
+      // V14: Check for Reflective Agent Loop
+      if (options.reflectiveConfig?.enableSelfCritique) {
+        response = await this.consultReflectiveAgent(agentId, caseData, options);
+      } else {
+        response = await this.consultAgent(agentId, caseData, options);
+      }
+
       responses.set(agentId, response);
       totalCost += this.estimateCost(response.tokenUsage);
       
@@ -251,17 +264,89 @@ export class TumorBoardOrchestrator {
   }
 
   /**
+   * V14: Consult a specialist agent using the Reflective Loop (Draft -> Critique -> Revise)
+   */
+  private async consultReflectiveAgent(
+    agentId: AgentId,
+    caseData: CaseData,
+    options: DeliberationOptions
+  ): Promise<AgentResponse> {
+    this.log(`[Reflective] Starting loop for ${agentId}...`);
+    
+    // 1. DRAFT
+    const draftSystemPrompt = getReflectiveDraftPrompt(agentId);
+    const draftResponse = await this.consultAgent(
+      agentId, 
+      caseData, 
+      options,
+      draftSystemPrompt
+    );
+    this.log(`[Reflective] Draft complete for ${agentId}`);
+
+    // 2. CRITIQUE (by Scientific Critic)
+    const persona = AGENT_PERSONAS[agentId];
+    const critiqueSystemPrompt = getCritiquePrompt(persona.name, persona.specialty);
+    
+    const critiqueContext = `## DRAFT PLAN TO EVALUATE
+${draftResponse.response}
+
+## PATIENT CONTEXT
+${formatCaseContext(caseData)}`;
+    
+    const critiqueResponse = await this.consultAgent(
+      "scientific-critic",
+      caseData,
+      options,
+      critiqueSystemPrompt,
+      critiqueContext
+    );
+    this.log(`[Reflective] Critique complete for ${agentId}`);
+
+    // 3. REVISION
+    const revisionSystemPrompt = getRevisionPrompt(agentId)
+      .replace("{CRITIQUE_INSERTION_POINT}", critiqueResponse.response);
+      
+    const finalResponse = await this.consultAgent(
+      agentId,
+      caseData,
+      options,
+      revisionSystemPrompt
+    );
+    this.log(`[Reflective] Revision complete for ${agentId}`);
+
+    // Aggregate tokens
+    return {
+      ...finalResponse,
+      tokenUsage: {
+        input: draftResponse.tokenUsage.input + critiqueResponse.tokenUsage.input + finalResponse.tokenUsage.input,
+        output: draftResponse.tokenUsage.output + critiqueResponse.tokenUsage.output + finalResponse.tokenUsage.output,
+      }
+    };
+  }
+
+  /**
    * Consult a single specialist agent
    */
   private async consultAgent(
     agentId: AgentId,
     caseData: CaseData,
-    options: DeliberationOptions
+    options: DeliberationOptions,
+    systemPromptOverride?: string,
+    userMessageOverride?: string
   ): Promise<AgentResponse> {
     const persona = AGENT_PERSONAS[agentId];
     const tools = AGENT_TOOLS[agentId];
-    const systemPrompt = getAgentSystemPrompt(agentId);
-    const caseContext = formatCaseContext(caseData);
+    const systemPrompt = systemPromptOverride || getAgentSystemPrompt(agentId);
+    
+    const messageContent = userMessageOverride || `## CASE FOR TUMOR BOARD REVIEW
+
+${formatCaseContext(caseData)}
+
+---
+
+Please provide your ${persona.specialty} assessment of this case.
+Use the available tools to retrieve relevant guidelines and evidence.
+Structure your response with clear recommendations and citations.`;
 
     this.log(`Consulting ${persona.name} (${persona.specialty})...`);
 
@@ -276,15 +361,7 @@ export class TumorBoardOrchestrator {
     const messages: Anthropic.Messages.MessageParam[] = [
       {
         role: "user",
-        content: `## CASE FOR TUMOR BOARD REVIEW
-
-${caseContext}
-
----
-
-Please provide your ${persona.specialty} assessment of this case.
-Use the available tools to retrieve relevant guidelines and evidence.
-Structure your response with clear recommendations and citations.`,
+        content: messageContent,
       },
     ];
 

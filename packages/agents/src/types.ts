@@ -173,6 +173,7 @@ export interface DeliberationOptions {
   useBatchApi?: boolean;
   usePromptCaching?: boolean;
   useExtendedThinking?: boolean | "auto";
+  reflectiveConfig?: ReflectiveAgentConfig;
   stream?: boolean;
   onStreamChunk?: (chunk: StreamChunk) => void;
   onPhaseChange?: (phase: DeliberationPhase) => void;
@@ -321,4 +322,32 @@ export interface EnsembleResult {
   simulationId: string;
   recommendation: TreatmentRecommendation;
   confidence: number;
+}
+
+// ============================================================================
+// V14: Reflective Agent Types (Palepu/AMIE)
+// ============================================================================
+
+export interface ReflectiveAgentConfig {
+  enableSelfCritique: boolean; // Default: true for V14
+  searchEnabled: boolean;      // Default: true
+  critiqueModel?: string;      // e.g., "gemini-1.5-pro" (stronger model for critique)
+  maxCritiqueRounds?: number;  // Default: 1
+}
+
+export interface CritiqueResult {
+  passed: boolean;
+  score: number; // 0-1
+  issues: string[];
+  missingGuidelines: string[];
+  safetyFlags: string[];
+  critiqueText: string;
+}
+
+export interface ReflectiveResponse extends AgentResponse {
+  draftResponse?: string;
+  critique?: CritiqueResult;
+  searchQueries?: string[];
+  searchResults?: string;
+  revisionHistory?: string[];
 }
