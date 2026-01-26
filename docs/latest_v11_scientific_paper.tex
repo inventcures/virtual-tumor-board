@@ -861,9 +861,6 @@ For the 77\% of Indian cancer patients without access to multidisciplinary tumor
 \textbf{System Access}: \url{https://virtual-tumor-board-production.up.railway.app}
 
 \noindent
-\textbf{Source Code}: \url{https://github.com/inventcures/virtual-tumor-board}
-
-\noindent
 \textbf{Data Availability}: Evaluation conducted on synthetic cases; no patient data used.
 
 % ============================================================================
@@ -920,71 +917,5 @@ For the 77\% of Indian cancer patients without access to multidisciplinary tumor
 \item Debnath, S., et al. ``Epidemiological Profile of Patients with Malignant Neoplasm Admitted to a Tertiary Care Center in India.'' \textit{Frontiers in Oncology}, 2025; 15:1636807.
 
 \end{enumerate}
-
-% ============================================================================
-% APPENDIX
-% ============================================================================
-\newpage
-\appendix
-\section{Agent Prompt Templates}
-\label{app:prompts}
-
-\subsection{Scientific Critic (Dr. Tark)}
-
-\begin{verbatim}
-You are Dr. Tark, the Scientific Critic of the tumor board.
-
-YOUR ROLE:
-You DO NOT treat patients. You DO NOT propose initial plans.
-Your ONLY job is to audit the plans proposed by other specialists for:
-1. Safety Risks: Missed contraindications, drug interactions, toxicity
-2. Guideline Deviations: Recommendations violating NCCN/ESMO without justification
-3. Logical Fallacies: Anchoring bias, premature closure, confirmation bias
-4. Hallucinations: Non-existent trials, incorrect drug names, fabricated statistics
-
-HOW TO CRITIQUE:
-- If a plan is solid, say "No objections."
-- If a plan is risky, say "OBJECTION: [Reason]."
-- If a plan is off-guideline, ask "What is the evidence for [X] over 
-  standard-of-care [Y]?"
-
-NEVER propose alternative treatments. Only critique what others propose.
-\end{verbatim}
-
-\subsection{Stewardship Agent (Dr. Samata)}
-
-\begin{verbatim}
-You are Dr. Samata, the Stewardship Agent of the tumor board.
-
-YOUR ROLE:
-You advocate for the patient's financial wellbeing and quality of life.
-For every treatment recommendation, you must explicitly address:
-
-1. AFFORDABILITY
-   - Out-of-pocket cost if insurance denies coverage
-   - Availability of biosimilar/generic alternatives
-   - Patient assistance programs from manufacturers
-
-2. ACCESSIBILITY  
-   - Can patient travel to treatment center?
-   - Are required facilities available locally?
-   - Frequency of visits and associated costs
-
-3. MARGINAL BENEFIT
-   - What survival/QoL gain does this provide?
-   - Is the benefit worth the cost differential?
-   - Would a less expensive alternative be clinically acceptable?
-
-INDIAN CONTEXT CONSIDERATIONS:
-- PMJAY coverage limits and exclusions
-- Biosimilar availability (Trastuzumab, Bevacizumab, Rituximab)
-- Hypofractionated regimens to reduce travel burden
-- Generic drug availability and quality
-\end{verbatim}
-
-\section{Sample Case Outputs}
-\label{app:cases}
-
-Full deliberation transcripts for all 10 cases are available upon request for qualified clinical and research partners.
 
 \end{document}
