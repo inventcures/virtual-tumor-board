@@ -29,6 +29,13 @@ export const runtime = "edge";
 // Agent configurations
 const AGENT_CONFIGS = [
   { 
+    id: "principal-investigator", 
+    name: "Dr. Adhyaksha", 
+    specialty: "Chairperson",
+    requiredDocs: ["clinical-notes"] as DocumentType[],
+    prompt: "Introduce the case, summarize patient status, and set the deliberation agenda."
+  },
+  { 
     id: "surgical-oncologist", 
     name: "Dr. Shalya", 
     specialty: "Surgical Oncology",
@@ -50,13 +57,6 @@ const AGENT_CONFIGS = [
     prompt: "Assess role of radiation therapy, technique, and timing."
   },
   { 
-    id: "palliative-care", 
-    name: "Dr. Shanti", 
-    specialty: "Palliative Care",
-    requiredDocs: ["clinical-notes"] as DocumentType[],
-    prompt: "Address symptom management, quality of life, and goals of care."
-  },
-  { 
     id: "radiologist", 
     name: "Dr. Chitran", 
     specialty: "Onco-Radiology",
@@ -76,6 +76,27 @@ const AGENT_CONFIGS = [
     specialty: "Genetics",
     requiredDocs: ["genomics"] as DocumentType[],
     prompt: "Interpret genomic findings and recommend targeted therapies."
+  },
+  { 
+    id: "scientific-critic", 
+    name: "Dr. Tark", 
+    specialty: "Scientific Safety",
+    requiredDocs: ["clinical-notes"] as DocumentType[],
+    prompt: "Review the case for safety concerns, guideline adherence (NCCN/ESMO), and contraindications."
+  },
+  { 
+    id: "stewardship", 
+    name: "Dr. Samata", 
+    specialty: "Patient Advocate",
+    requiredDocs: ["clinical-notes"] as DocumentType[],
+    prompt: "Assess financial toxicity, patient access, and quality of life alignment."
+  },
+  { 
+    id: "palliative-care", 
+    name: "Dr. Shanti", 
+    specialty: "Palliative Care",
+    requiredDocs: ["clinical-notes"] as DocumentType[],
+    prompt: "Address symptom management, quality of life, and goals of care."
   },
 ];
 
