@@ -22,8 +22,10 @@ import {
   Info,
   User,
   ArrowLeft,
+  Database,
 } from "lucide-react";
 import { useLongitudinalData } from "@/hooks/useLongitudinalData";
+import { useTCIALongitudinalData } from "@/hooks/useTCIALongitudinalData";
 import { useSliceSync, useSlicePlayback } from "@/hooks/useSliceSync";
 import { 
   PanelSettings, 
@@ -40,23 +42,39 @@ interface LongitudinalViewerProps {
   patientId?: string;
   onBack?: () => void;
   showPatientSummary?: boolean;
+  // Whether to use real TCIA DICOM data (requires network)
+  useTCIAData?: boolean;
 }
 
 export function LongitudinalViewer({
   patientId,
   onBack,
   showPatientSummary = false,
+  useTCIAData: initialUseTCIA = true, // Default to real TCIA data
 }: LongitudinalViewerProps) {
-  // Core data hook
+  // Toggle between synthetic and real TCIA data
+  const [useTCIAData, setUseTCIAData] = useState(initialUseTCIA);
+  
+  // Synthetic data hook (fallback)
+  const syntheticData = useLongitudinalData();
+  
+  // Real TCIA data hook
+  const tciaData = useTCIALongitudinalData();
+  
+  // Use active data source
+  const activeData = useTCIAData ? tciaData : syntheticData;
   const {
     study,
     timepoints,
     lesions,
     assessments,
     progressionSummary,
-    loadDemoData,
     isLoading,
-  } = useLongitudinalData();
+  } = activeData;
+  
+  // TCIA-specific functions
+  const { getSliceWithTumors, loadTCIAData, loadingProgress, error: tciaError } = tciaData;
+  const { loadDemoData } = syntheticData;
 
   // View state
   const [selectedTimepointIds, setSelectedTimepointIds] = useState<string[]>([]);
@@ -99,12 +117,16 @@ export function LongitudinalViewer({
     },
   });
 
-  // Load demo data on mount if no study
+  // Load data on mount based on data source
   useEffect(() => {
     if (!study) {
-      loadDemoData();
+      if (useTCIAData) {
+        loadTCIAData();
+      } else {
+        loadDemoData();
+      }
     }
-  }, [study, loadDemoData]);
+  }, [study, useTCIAData, loadTCIAData, loadDemoData]);
 
   // Auto-select first few timepoints
   useEffect(() => {
@@ -163,9 +185,65 @@ export function LongitudinalViewer({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full bg-slate-900 rounded-xl">
-        <div className="flex flex-col items-center gap-3 text-slate-400">
-          <Loader2 className="w-8 h-8 animate-spin" />
-          <span className="text-sm">Loading longitudinal study...</span>
+        <div className="flex flex-col items-center gap-4 text-slate-400">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-400" />
+          <div className="text-center">
+            <span className="text-sm font-medium text-white">
+              {useTCIAData ? 'Loading Real TCIA CT Scans...' : 'Loading Demo Data...'}
+            </span>
+            {useTCIAData && loadingProgress.total > 0 && (
+              <div className="mt-2">
+                <div className="w-48 h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-500 transition-all duration-300"
+                    style={{ width: `${(loadingProgress.loaded / loadingProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs mt-1 text-slate-500">
+                  {loadingProgress.loaded} / {loadingProgress.total} slices
+                </p>
+              </div>
+            )}
+          </div>
+          {useTCIAData && (
+            <p className="text-xs text-slate-500">
+              Fetching from TCIA via Cloudflare CDN
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  // Error state for TCIA
+  if (useTCIAData && tciaError) {
+    return (
+      <div className="flex items-center justify-center h-full bg-slate-900 rounded-xl">
+        <div className="flex flex-col items-center gap-4 text-center max-w-md">
+          <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+            <Database className="w-6 h-6 text-red-400" />
+          </div>
+          <div>
+            <p className="text-white font-medium">Failed to Load TCIA Data</p>
+            <p className="text-sm text-slate-400 mt-1">{tciaError}</p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => loadTCIAData()}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-500 transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => {
+                setUseTCIAData(false);
+                loadDemoData();
+              }}
+              className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm hover:bg-slate-600 transition-colors"
+            >
+              Use Synthetic Data
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -293,6 +371,28 @@ export function LongitudinalViewer({
             )}
           </button>
 
+          {/* Data Source Toggle */}
+          <button
+            onClick={() => {
+              const newUseTCIA = !useTCIAData;
+              setUseTCIAData(newUseTCIA);
+              if (newUseTCIA) {
+                loadTCIAData();
+              } else {
+                loadDemoData();
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+              useTCIAData 
+                ? 'bg-emerald-600 text-white' 
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+            title={useTCIAData ? 'Using Real TCIA CT Scans' : 'Using Synthetic Data'}
+          >
+            <Database className="w-3.5 h-3.5" />
+            {useTCIAData ? 'TCIA' : 'Synthetic'}
+          </button>
+
           {/* Patient View */}
           <button
             onClick={() => setIsPatientView(true)}
@@ -333,6 +433,8 @@ export function LongitudinalViewer({
               showMeasurements={showMeasurements}
               highlightedLesionId={highlightedLesionId}
               onLesionClick={setHighlightedLesionId}
+              getSliceWithTumors={useTCIAData ? getSliceWithTumors : undefined}
+              useTCIAData={useTCIAData}
             />
           </div>
 

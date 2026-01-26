@@ -46,6 +46,10 @@ interface ComparisonGridProps {
   showMeasurements?: boolean;
   highlightedLesionId?: string;
   onLesionClick?: (lesionId: string) => void;
+  // Optional: Function to get real DICOM slice with tumor overlays
+  getSliceWithTumors?: (timepointId: string, sliceIndex: number) => ImageData | null;
+  // Flag to indicate if using real TCIA data
+  useTCIAData?: boolean;
 }
 
 export function ComparisonGrid({
@@ -59,6 +63,8 @@ export function ComparisonGrid({
   onPanelSettingsChange,
   showMeasurements = true,
   highlightedLesionId,
+  getSliceWithTumors,
+  useTCIAData = false,
   onLesionClick,
 }: ComparisonGridProps) {
   const [maximizedPanel, setMaximizedPanel] = useState<string | null>(null);
@@ -111,6 +117,8 @@ export function ComparisonGrid({
             isMaximized
             onToggleMaximize={() => setMaximizedPanel(null)}
             onWheel={handleWheel}
+            getSliceWithTumors={getSliceWithTumors}
+            useTCIAData={useTCIAData}
           />
         </div>
       );
@@ -135,6 +143,8 @@ export function ComparisonGrid({
             onLesionClick={onLesionClick}
             onToggleMaximize={() => setMaximizedPanel(tp.id)}
             onWheel={handleWheel}
+            getSliceWithTumors={getSliceWithTumors}
+            useTCIAData={useTCIAData}
           />
         ))}
       </div>
@@ -166,6 +176,9 @@ interface ComparisonPanelProps {
   isMaximized?: boolean;
   onToggleMaximize: () => void;
   onWheel: (e: React.WheelEvent) => void;
+  // Optional: Function to get real DICOM slice with tumor overlays
+  getSliceWithTumors?: (timepointId: string, sliceIndex: number) => ImageData | null;
+  useTCIAData?: boolean;
 }
 
 function ComparisonPanel({
@@ -181,6 +194,8 @@ function ComparisonPanel({
   isMaximized = false,
   onToggleMaximize,
   onWheel,
+  getSliceWithTumors,
+  useTCIAData = false,
 }: ComparisonPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [showControls, setShowControls] = useState(false);
@@ -201,7 +216,7 @@ function ComparisonPanel({
     });
   };
 
-  // Generate synthetic image data for demo - slice-dependent
+  // Render image - either from real TCIA DICOM or synthetic
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -212,13 +227,38 @@ function ComparisonPanel({
     const width = canvas.width;
     const height = canvas.height;
     
+    // Try to use real TCIA data if available
+    if (useTCIAData && getSliceWithTumors) {
+      const realImageData = getSliceWithTumors(timepoint.id, currentSlice);
+      if (realImageData) {
+        // Scale the real image data to fit canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = realImageData.width;
+        tempCanvas.height = realImageData.height;
+        const tempCtx = tempCanvas.getContext('2d')!;
+        tempCtx.putImageData(realImageData, 0, 0);
+        
+        // Draw scaled to our canvas
+        ctx.drawImage(tempCanvas, 0, 0, width, height);
+        
+        // Draw measurement annotations if enabled (on top of real image)
+        if (showMeasurements) {
+          measurements.forEach(m => {
+            const isHighlighted = m.lesion.id === highlightedLesionId;
+            drawLesionAnnotation(ctx, m, isHighlighted, width, height, currentSlice, timepoint.totalSlices);
+          });
+        }
+        return;
+      }
+    }
+    
+    // Fallback: Generate synthetic CT-like image that varies with slice
     // Seeded random for consistent but varying slices
     const seededRandom = (seed: number) => {
       const x = Math.sin(seed) * 10000;
       return x - Math.floor(x);
     };
     
-    // Generate synthetic CT-like image that varies with slice
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
     
@@ -399,7 +439,7 @@ function ComparisonPanel({
         drawLesionAnnotation(ctx, m, isHighlighted, width, height, currentSlice, timepoint.totalSlices);
       });
     }
-  }, [timepoint, currentSlice, settings, measurements, showMeasurements, highlightedLesionId, percentChange]);
+  }, [timepoint, currentSlice, settings, measurements, showMeasurements, highlightedLesionId, percentChange, useTCIAData, getSliceWithTumors]);
 
   return (
     <div 
