@@ -20,6 +20,11 @@ export * from "./tools";
 // RAG connector (interface for Gemini File Search)
 export * from "./rag";
 
+// MARC-v1 Extraction (Evaluator-Optimizer Reliability Loops)
+export * from "./extraction";
+export { ExtractionEvaluator } from "./extraction/evaluator";
+export { ExtractionOptimizer } from "./extraction/optimizer";
+
 // Types re-exported from shared
 export type {
   AgentId,
