@@ -23,6 +23,7 @@ import {
   cacheResult,
 } from "@/lib/cache/document-cache";
 import { logMARCEvent } from "@/lib/analytics/marc-analytics";
+import { logAPIUsage, estimateTokens } from "@/lib/costs";
 
 export const runtime = "edge";
 export const maxDuration = 60;
@@ -146,11 +147,22 @@ function classifyByPatterns(text: string): { type: DocumentType; confidence: num
 
 async function extractTextFromImage(base64Data: string, mimeType: string): Promise<string> {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const ocrPrompt = "Extract ALL text from this medical document. Include headers, tables, values. Output ONLY the text.";
   const result = await model.generateContent([
     { inlineData: { data: base64Data, mimeType } },
-    { text: "Extract ALL text from this medical document. Include headers, tables, values. Output ONLY the text." },
+    { text: ocrPrompt },
   ]);
-  return result.response.text();
+  const responseText = result.response.text();
+  
+  // Log OCR cost (estimate input tokens from base64 size - roughly 0.75 bytes per token for images)
+  logAPIUsage({
+    model: 'gemini-2.0-flash',
+    inputTokens: Math.ceil(base64Data.length * 0.75 / 4) + estimateTokens(ocrPrompt),
+    outputText: responseText,
+    category: 'marc_extraction',
+  });
+  
+  return responseText;
 }
 
 function redactPII(text: string): string {
@@ -214,7 +226,17 @@ ${JSON.stringify(data, null, 2)}
 Score accuracy 0-1 where 1=perfect. Respond ONLY with JSON: {"accuracy": 0.85}`;
 
     const result = await model.generateContent(prompt);
-    const match = result.response.text().match(/\{[\s\S]*\}/);
+    const responseText = result.response.text();
+    const match = responseText.match(/\{[\s\S]*\}/);
+    
+    // Log evaluation cost
+    logAPIUsage({
+      model: 'gemini-2.0-flash',
+      inputText: prompt,
+      outputText: responseText,
+      category: 'marc_evaluation',
+    });
+    
     if (match) {
       const parsed = JSON.parse(match[0]);
       return Math.min(1, Math.max(0, parsed.accuracy || 0.7));
@@ -393,8 +415,17 @@ async function runReliabilityLoop(
     try {
       const fullPrompt = `${currentPrompt}\n\nDocument text:\n${sourceText.slice(0, 6000)}\n\nRespond with ONLY a valid JSON object.`;
       const result = await model.generateContent(fullPrompt);
-      const match = result.response.text().match(/\{[\s\S]*\}/);
+      const responseText = result.response.text();
+      const match = responseText.match(/\{[\s\S]*\}/);
       currentData = match ? JSON.parse(match[0]) : { rawText: sourceText.slice(0, 2000) };
+      
+      // Log extraction cost
+      logAPIUsage({
+        model: 'gemini-2.0-flash',
+        inputText: fullPrompt,
+        outputText: responseText,
+        category: 'marc_extraction',
+      });
     } catch (e) {
       log('Extraction failed', e);
       stoppedReason = 'Extraction failed';
@@ -572,8 +603,17 @@ export async function POST(request: NextRequest) {
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       const fullPrompt = `${basePrompt}\n\nDocument:\n${redactedText.slice(0, 6000)}\n\nJSON only.`;
       const result = await model.generateContent(fullPrompt);
-      const match = result.response.text().match(/\{[\s\S]*\}/);
+      const responseText = result.response.text();
+      const match = responseText.match(/\{[\s\S]*\}/);
       extractedData = match ? JSON.parse(match[0]) : { rawText: redactedText.slice(0, 2000) };
+      
+      // Log single-pass extraction cost
+      logAPIUsage({
+        model: 'gemini-2.0-flash',
+        inputText: fullPrompt,
+        outputText: responseText,
+        category: 'marc_extraction',
+      });
       
       reliabilityLoopMetadata = {
         enabled: false,
