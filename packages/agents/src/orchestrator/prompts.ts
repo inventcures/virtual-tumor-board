@@ -83,6 +83,12 @@ export function getReflectiveDraftPrompt(agentId: AgentId): string {
 You are currently in the **DRAFTING PHASE**.
 Generate your **initial** management plan based on your expertise.
 Do not hold back - provide your best hypothesis.
+
+## CRITICAL REQUIREMENT: TREATMENT RATIONALE
+For each major treatment option considered (e.g., Surgery vs Neoadjuvant), you MUST list:
+- **CONFIRMATORY EVIDENCE (+):** Patient/Tumor factors supporting this.
+- **DISCONFIRMATORY EVIDENCE (-):** Factors arguing against this.
+
 Focus on:
 1. Diagnosis confirmation & Staging
 2. Treatment modality (Neoadjuvant/Surgery/Adjuvant)
@@ -129,6 +135,18 @@ Your supervisor provided the following critique on your draft:
 2. If valid, incorporate the changes.
 3. If invalid, explain why (citing evidence).
 4. Provide your **FINAL** structured recommendation.
+
+## REQUIRED OUTPUT STRUCTURE
+You MUST structure your final treatment recommendation as follows:
+
+**Recommendation:** [Primary Plan]
+
+**Treatment Option 1: [Name]**
+- **Confirmatory (+):** [Evidence]
+- **Disconfirmatory (-):** [Evidence]
+- **Net Assessment:** [Why chosen/rejected]
+
+[Repeat for other options]
 
 Ensure you cite guidelines explicitly.`;
 }

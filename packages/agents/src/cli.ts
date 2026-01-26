@@ -312,6 +312,12 @@ program
            console.log(chalk.bold("\n3. Completeness"));
            console.log(`   Genetics: ${score.completeness.genetics ? "✅" : "❌"}`);
            console.log(`   Psychosocial: ${score.completeness.psychosocial ? "✅" : "❌"}`);
+
+           console.log(chalk.bold("\n4. CABot Clinical Reasoning"));
+           console.log(`   Guideline Support: ${score.cabotDimensions.guidelineSupport.toFixed(2)}`);
+           console.log(`   Patient Fit: ${score.cabotDimensions.patientFit.toFixed(2)}`);
+           console.log(`   Tumor Bio Match: ${score.cabotDimensions.tumorBiologyMatch.toFixed(2)}`);
+           console.log(`   Evidence Strength: ${score.cabotDimensions.evidenceStrength.toFixed(2)}`);
         }
       }
 
