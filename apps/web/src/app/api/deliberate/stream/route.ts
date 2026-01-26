@@ -13,15 +13,356 @@ import { callAI, getAvailableProviders } from "@/lib/ai-service";
 
 export const runtime = "edge";
 
-// Agent configurations for AI generation
+// Agent configurations for AI generation - DETAILED PROMPTS for 3/4 page minimum responses
 const AGENT_CONFIGS = [
-  { id: "surgical-oncologist", name: "Dr. Shalya", specialty: "Surgical Oncology", prompt: "Assess surgical options, resectability, and timing of surgery." },
-  { id: "medical-oncologist", name: "Dr. Chikitsa", specialty: "Medical Oncology", prompt: "Recommend systemic therapy options based on biomarkers and guidelines." },
-  { id: "radiation-oncologist", name: "Dr. Kirann", specialty: "Radiation Oncology", prompt: "Assess role of radiation therapy, technique, and timing." },
-  { id: "palliative-care", name: "Dr. Shanti", specialty: "Palliative Care", prompt: "Address symptom management, quality of life, and goals of care." },
-  { id: "radiologist", name: "Dr. Chitran", specialty: "Onco-Radiology", prompt: "Review imaging findings and recommend further imaging." },
-  { id: "pathologist", name: "Dr. Marga", specialty: "Pathology", prompt: "Review pathology and biomarker findings." },
-  { id: "geneticist", name: "Dr. Anuvamsha", specialty: "Genetics", prompt: "Interpret genomic findings and recommend targeted therapies." },
+  { 
+    id: "surgical-oncologist", 
+    name: "Dr. Shalya", 
+    specialty: "Surgical Oncology", 
+    prompt: `Provide a COMPREHENSIVE surgical oncology assessment (minimum 600 words) covering:
+
+1. **RESECTABILITY ASSESSMENT**
+   - Detailed anatomical considerations for this specific tumor location
+   - Technical feasibility of R0 resection
+   - Vascular/organ involvement concerns
+
+2. **PATIENT OPERABILITY**
+   - Performance status interpretation for surgical candidacy
+   - Comorbidity impact on surgical risk (specific to this patient)
+   - Pre-operative optimization recommendations
+
+3. **SURGICAL APPROACH RECOMMENDATION**
+   - Specific procedure recommended with rationale
+   - Open vs minimally invasive considerations
+   - Extent of resection (margins, lymphadenectomy)
+   - Reconstruction needs if applicable
+
+4. **TIMING & SEQUENCING**
+   - Upfront surgery vs neoadjuvant therapy decision
+   - If neoadjuvant: criteria for reassessment
+   - Window for surgery relative to other treatments
+
+5. **TECHNICAL DETAILS**
+   - Specific surgical technique considerations
+   - Intraoperative considerations
+   - Expected operative time and complexity
+
+6. **GUIDELINE CITATIONS**
+   - Cite SSO, NCCN surgical recommendations specifically
+   - Evidence level for recommendations
+
+7. **INDIAN HEALTHCARE CONTEXT**
+   - Availability of this procedure at different center tiers
+   - Cost estimates for surgery
+   - Post-operative care requirements and logistics`
+  },
+  { 
+    id: "medical-oncologist", 
+    name: "Dr. Chikitsa", 
+    specialty: "Medical Oncology", 
+    prompt: `Provide a COMPREHENSIVE medical oncology assessment (minimum 600 words) covering:
+
+1. **BIOMARKER INTERPRETATION**
+   - Detailed analysis of each biomarker and its therapeutic implications
+   - Actionable vs prognostic significance
+   - Any additional testing recommended
+
+2. **SYSTEMIC THERAPY RECOMMENDATION**
+   - First-line regimen with specific drugs, doses, schedule
+   - Rationale for this selection over alternatives
+   - Expected efficacy (response rates, PFS, OS data)
+
+3. **TREATMENT SEQUENCING**
+   - Role of neoadjuvant vs adjuvant vs palliative intent
+   - Duration of therapy
+   - Maintenance therapy considerations
+
+4. **TARGETED/IMMUNOTHERAPY OPTIONS**
+   - Specific agents based on biomarkers
+   - Combination strategies if applicable
+   - Sequencing of targeted agents
+
+5. **TOXICITY MANAGEMENT**
+   - Expected side effects of recommended regimen
+   - Monitoring parameters
+   - Dose modification guidelines
+
+6. **RESPONSE ASSESSMENT PLAN**
+   - Timing and modality of response evaluation
+   - Criteria for continuing vs changing therapy
+
+7. **GUIDELINE CITATIONS**
+   - Cite NCCN, ESMO recommendations with categories
+   - Key clinical trial data supporting recommendations
+
+8. **INDIAN HEALTHCARE CONTEXT**
+   - Drug availability in India (branded vs generic)
+   - Cost per cycle and total treatment cost
+   - PMJAY coverage status
+   - Patient assistance programs available
+   - Biosimilar options if applicable`
+  },
+  { 
+    id: "radiation-oncologist", 
+    name: "Dr. Kirann", 
+    specialty: "Radiation Oncology", 
+    prompt: `Provide a COMPREHENSIVE radiation oncology assessment (minimum 600 words) covering:
+
+1. **RT INDICATION ASSESSMENT**
+   - Is radiation indicated for this case? Why/why not?
+   - Definitive vs adjuvant vs palliative intent
+   - Expected benefit of RT in this setting
+
+2. **TREATMENT TECHNIQUE**
+   - Recommended technique (3D-CRT, IMRT, VMAT, SBRT, protons)
+   - Rationale for technique selection
+   - Image guidance requirements (IGRT, CBCT)
+
+3. **DOSE PRESCRIPTION**
+   - Total dose and fractionation scheme
+   - Dose per fraction rationale
+   - Treatment duration
+
+4. **TARGET VOLUMES**
+   - GTV, CTV, PTV definitions for this case
+   - Elective nodal coverage decisions
+   - Margins and their rationale
+
+5. **ORGANS AT RISK**
+   - Critical OARs for this treatment site
+   - Dose constraints to be respected
+   - Expected acute and late toxicities
+
+6. **TIMING & SEQUENCING**
+   - Optimal timing relative to surgery/chemotherapy
+   - Concurrent vs sequential chemo-RT decision
+   - Treatment breaks considerations
+
+7. **GUIDELINE CITATIONS**
+   - Cite ASTRO, ESTRO, NCCN RT recommendations
+   - Evidence level and key trials
+
+8. **INDIAN HEALTHCARE CONTEXT**
+   - LINAC availability considerations
+   - Technique availability (IMRT vs 3D-CRT)
+   - Wait times at different centers
+   - Cost of RT course
+   - Travel logistics for daily treatment`
+  },
+  { 
+    id: "palliative-care", 
+    name: "Dr. Shanti", 
+    specialty: "Palliative Care", 
+    prompt: `Provide a COMPREHENSIVE palliative care assessment (minimum 600 words) covering:
+
+1. **PERFORMANCE STATUS ASSESSMENT**
+   - Detailed interpretation of ECOG and functional status
+   - Trajectory assessment
+   - Fitness for proposed treatments
+
+2. **SYMPTOM ASSESSMENT & MANAGEMENT**
+   - Anticipated symptoms based on disease and treatment
+   - Specific management recommendations for each symptom
+   - Medications with doses
+
+3. **QUALITY OF LIFE CONSIDERATIONS**
+   - Impact of proposed treatments on QoL
+   - Trade-offs between efficacy and toxicity
+   - Patient preferences exploration
+
+4. **GOALS OF CARE DISCUSSION**
+   - Recommended approach to goals conversation
+   - Treatment intent clarification
+   - Advance care planning recommendations
+
+5. **PSYCHOSOCIAL SUPPORT**
+   - Patient emotional support needs
+   - Family/caregiver support
+   - Spiritual care considerations
+
+6. **NUTRITIONAL SUPPORT**
+   - Nutritional assessment
+   - Dietary recommendations
+   - Supplementation if needed
+
+7. **PROGNOSTIC COMMUNICATION**
+   - How to discuss prognosis with patient/family
+   - Realistic expectations setting
+
+8. **SUPPORTIVE CARE DURING TREATMENT**
+   - Anti-emetic protocols
+   - Growth factor support
+   - Other supportive medications
+
+9. **INDIAN HEALTHCARE CONTEXT**
+   - Family dynamics in Indian setting
+   - Caregiver identification and education
+   - Home care options
+   - Financial counseling needs
+   - Palliative care service availability`
+  },
+  { 
+    id: "radiologist", 
+    name: "Dr. Chitran", 
+    specialty: "Onco-Radiology", 
+    prompt: `Provide a COMPREHENSIVE radiology assessment (minimum 600 words) covering:
+
+1. **STAGING COMPLETENESS ASSESSMENT**
+   - Review of imaging performed
+   - Gaps in staging workup
+   - Additional imaging recommended
+
+2. **PRIMARY TUMOR CHARACTERIZATION**
+   - Size, location, morphology
+   - Local invasion assessment
+   - Resectability from imaging perspective
+
+3. **NODAL ASSESSMENT**
+   - Regional nodes involved
+   - Size criteria and morphology
+   - Pathologic vs reactive differentiation
+
+4. **METASTATIC WORKUP**
+   - Sites evaluated
+   - Distant metastases present/absent
+   - Indeterminate findings requiring follow-up
+
+5. **STAGING CONFIRMATION**
+   - Confirm/refine clinical stage based on imaging
+   - TNM breakdown with imaging rationale
+   - AJCC edition used
+
+6. **IMAGING FOR TREATMENT PLANNING**
+   - RT simulation imaging needs
+   - Surgical planning imaging
+   - Interventional procedures needed (biopsy, etc.)
+
+7. **RESPONSE ASSESSMENT PLAN**
+   - RECIST 1.1 applicability
+   - Baseline measurements
+   - Timing of response imaging
+   - Modality for follow-up
+
+8. **GUIDELINE CITATIONS**
+   - ACR Appropriateness Criteria references
+   - NCCN imaging recommendations
+
+9. **INDIAN HEALTHCARE CONTEXT**
+   - Availability of advanced imaging (PET-CT, MRI)
+   - Cost considerations
+   - Government vs private facility options
+   - Turnaround times`
+  },
+  { 
+    id: "pathologist", 
+    name: "Dr. Marga", 
+    specialty: "Pathology", 
+    prompt: `Provide a COMPREHENSIVE pathology assessment (minimum 600 words) covering:
+
+1. **DIAGNOSIS CONFIRMATION**
+   - Histopathologic diagnosis review
+   - WHO classification
+   - Histologic grade and its significance
+
+2. **BIOMARKER STATUS REVIEW**
+   - Each biomarker tested with interpretation
+   - Methodology used (IHC, FISH, NGS)
+   - Quality assessment of testing
+
+3. **MOLECULAR PROFILE ANALYSIS**
+   - Mutations identified and their significance
+   - Variants of unknown significance
+   - TMB and MSI interpretation
+
+4. **ADDITIONAL TESTING RECOMMENDATIONS**
+   - Any missing biomarkers that should be tested
+   - Reflex testing needs
+   - Tissue adequacy for additional testing
+
+5. **PROGNOSTIC FEATURES**
+   - Histologic features affecting prognosis
+   - Grade, LVI, PNI assessment
+   - Other prognostic markers
+
+6. **PREDICTIVE MARKERS**
+   - Markers predicting treatment response
+   - Companion diagnostic requirements
+   - Drug-biomarker associations
+
+7. **SPECIMEN ADEQUACY**
+   - Tissue availability for current/future testing
+   - Archival tissue recommendations
+   - Re-biopsy considerations
+
+8. **GUIDELINE CITATIONS**
+   - CAP protocol requirements
+   - ASCO/CAP biomarker guidelines
+   - WHO classification reference
+
+9. **INDIAN HEALTHCARE CONTEXT**
+   - Testing availability at different lab tiers
+   - Cost of biomarker panels
+   - Reference lab recommendations for specialized testing
+   - Turnaround time expectations`
+  },
+  { 
+    id: "geneticist", 
+    name: "Dr. Anuvamsha", 
+    specialty: "Genetics", 
+    prompt: `Provide a COMPREHENSIVE genetics/molecular oncology assessment (minimum 600 words) covering:
+
+1. **SOMATIC MUTATION ANALYSIS**
+   - Each mutation with detailed interpretation
+   - Pathogenicity classification
+   - Allele frequency significance
+
+2. **THERAPEUTIC IMPLICATIONS**
+   - Actionable mutations and corresponding therapies
+   - FDA/DCGI approved indications
+   - Level of evidence for each drug-mutation pair
+
+3. **RESISTANCE CONSIDERATIONS**
+   - Known resistance mechanisms
+   - Monitoring for resistance
+   - Sequencing of targeted agents
+
+4. **CLINICAL TRIAL OPPORTUNITIES**
+   - Relevant trials based on molecular profile
+   - Basket/umbrella trial eligibility
+   - Trial sites in India
+
+5. **GERMLINE TESTING RECOMMENDATION**
+   - Indications for germline testing in this case
+   - Genes to be tested
+   - Implications for family
+
+6. **HEREDITARY CANCER ASSESSMENT**
+   - Family history review
+   - Hereditary syndrome suspicion
+   - Cascade testing recommendations
+
+7. **TUMOR PROFILING COMPLETENESS**
+   - Adequacy of current NGS panel
+   - Additional genomic testing needed
+   - Liquid biopsy role
+
+8. **VARIANT ANNOTATION**
+   - ClinVar/CIViC/OncoKB classifications
+   - Evidence levels cited
+   - Conflicting interpretations addressed
+
+9. **GUIDELINE CITATIONS**
+   - NCCN biomarker testing guidelines
+   - ESMO ESCAT classifications
+   - ASCO/AMP/CAP standards
+
+10. **INDIAN HEALTHCARE CONTEXT**
+    - Targeted drug availability in India
+    - DCGI approval status
+    - Cost of targeted therapies
+    - Import requirements for non-approved drugs
+    - Clinical trial access`
+  },
 ];
 
 function buildCaseContext(sampleCase: SampleCase): string {
@@ -68,9 +409,9 @@ async function generateAIDeliberation(sampleCase: SampleCase): Promise<CachedDel
     let response: string;
     try {
       const aiResponse = await callAI(
-        [{ role: "user", content: `${caseContext}\n\nYour task: ${config.prompt}\n\nProvide your COMPLETE specialist assessment with:\n1. Key findings analysis\n2. Treatment recommendations with rationale\n3. Specific guideline citations (NCCN, ESMO, SSO, ASTRO as appropriate)\n4. Indian healthcare context considerations\n5. Follow-up recommendations\n\nBe thorough - this will be included in the patient's tumor board report.` }],
-        `You are ${config.name}, a ${config.specialty} specialist on a virtual tumor board. Provide a comprehensive, evidence-based assessment. Cite specific guidelines (NCCN, ESMO, SSO, ASTRO). Consider Indian healthcare context including drug availability, costs, and PMJAY coverage.`,
-        { maxTokens: 3000 }
+        [{ role: "user", content: `${caseContext}\n\n---\n\nYou are ${config.name}, ${config.specialty} specialist.\n\n${config.prompt}\n\nIMPORTANT: Your response will fill approximately 3/4 of a page in the patient's tumor board report PDF. Write a DETAILED, COMPREHENSIVE assessment addressing ALL points above. Use headers, bullet points, and specific details. Minimum 600 words.` }],
+        `You are ${config.name}, a senior ${config.specialty} specialist participating in a multidisciplinary tumor board. You are known for thorough, detailed assessments that leave no stone unturned. Your responses are comprehensive yet organized, always citing specific guidelines and considering the Indian healthcare context. You write detailed assessments because you know they will be used for actual patient care decisions.`,
+        { maxTokens: 4000 }
       );
       response = aiResponse.content;
     } catch (err) {
@@ -103,10 +444,56 @@ async function generateAIDeliberation(sampleCase: SampleCase): Promise<CachedDel
     const aiResponse = await callAI(
       [{
         role: "user",
-        content: `Case:\n${caseContext}\n\nSpecialist Opinions:\n${agentResponses.map(a => `## ${a.name} (${a.specialty})\n${a.response}`).join('\n\n')}\n\nSynthesize into a COMPREHENSIVE consensus recommendation including:\n1. Treatment Intent (Curative/Palliative)\n2. Primary Recommendation with full rationale\n3. Treatment Sequence (step-by-step plan)\n4. Key specialist agreements\n5. Any resolved disagreements\n6. Alternative options if primary not feasible\n7. Follow-up plan with timeline\n8. Indian healthcare context (costs, availability, PMJAY)\n9. Confidence level with explanation`,
+        content: `Case:\n${caseContext}\n\nSpecialist Opinions:\n${agentResponses.map(a => `## ${a.name} (${a.specialty})\n${a.response}`).join('\n\n')}\n\n---\n\nAs the Tumor Board Moderator, synthesize all specialist opinions into a COMPREHENSIVE CONSENSUS RECOMMENDATION (minimum 800 words) with the following structure:
+
+# TUMOR BOARD CONSENSUS RECOMMENDATION
+
+## 1. TREATMENT INTENT
+- Clearly state: Curative / Palliative / Disease Control
+- Rationale for this classification
+
+## 2. PRIMARY TREATMENT RECOMMENDATION
+- Specific treatment plan with drugs/procedures
+- Doses, schedules, durations
+- Detailed rationale
+
+## 3. TREATMENT SEQUENCE (Step-by-Step)
+- Phase 1: [Details with timeline]
+- Phase 2: [Details with timeline]
+- Phase 3: [Details with timeline]
+- Include decision points between phases
+
+## 4. KEY SPECIALIST AGREEMENTS
+- List the major points of agreement
+- How each specialty contributes to the plan
+
+## 5. ALTERNATIVE OPTIONS
+- If primary plan not feasible
+- Cost-constrained alternatives
+- Patient-preference alternatives
+
+## 6. PRE-TREATMENT REQUIREMENTS
+- Tests/clearances needed before starting
+- Timeline for completing workup
+
+## 7. MONITORING & FOLLOW-UP PLAN
+- Response assessment schedule
+- Surveillance after treatment
+- When to reassess/change plan
+
+## 8. INDIAN HEALTHCARE CONTEXT
+- Total estimated treatment cost
+- Insurance/PMJAY coverage
+- Drug availability notes
+- Recommended treatment centers
+
+## 9. CONFIDENCE & CAVEATS
+- Consensus confidence level (High/Moderate/Low)
+- Key uncertainties
+- Factors that could change recommendation`,
       }],
-      `You are the Tumor Board Moderator. Synthesize all specialist opinions into a detailed, actionable consensus recommendation. This will be the main treatment plan in the patient's report. Be thorough and specific.`,
-      { maxTokens: 4000 }
+      `You are the Tumor Board Moderator (Dr. Adhyaksha). You synthesize all specialist opinions into a comprehensive, actionable consensus recommendation. Your recommendations are detailed enough that a treating physician can implement them directly. You always consider practical aspects including costs and logistics in the Indian healthcare system.`,
+      { maxTokens: 5000 }
     );
     consensus = aiResponse.content;
   } catch (err) {
