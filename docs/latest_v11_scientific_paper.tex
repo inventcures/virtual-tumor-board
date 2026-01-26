@@ -128,11 +128,11 @@ Email: \texttt{spiff007@gmail.com}
 \noindent
 Multidisciplinary tumor boards (MTBs) represent the gold standard for cancer treatment decisions, yet remain structurally inaccessible to 77\% of patients in India and billions worldwide. We present the \textbf{Agentic Virtual Tumor Board}, a hybrid multi-agent system that transcends ``chatbot oncology'' through rigorous architectural innovations.
 
-Our system integrates three core components: (1) \textbf{MARC-v1} reliability loops achieving 95\%+ extraction confidence through evaluator-optimizer patterns; (2) \textbf{MAI-DxO} adversarial deliberation preventing sycophantic consensus through role-based prompting and domain authority veto mechanisms; and (3) \textbf{MedGemma} multimodal grounding anchoring clinical decisions in pixel-level imaging evidence.
+Our system integrates three core components: (1) \textbf{MARC-v1} reliability loops using evaluator-optimizer patterns to improve extraction fidelity; (2) \textbf{MAI-DxO} adversarial deliberation designed to prevent sycophantic consensus through role-based prompting and domain authority veto mechanisms; and (3) \textbf{MedGemma} multimodal integration for anchoring clinical discussions in imaging evidence.
 
-Evaluated across 10 clinically diverse synthetic cases spanning genomic complexity (KRAS G12C+ NSCLC), financial constraints (rural HER2-equivocal breast cancer), and rare presentations (pediatric GBM with H3 G34R), our system achieves 92\% success in proposing financially viable, guideline-compliant treatment plans. The Stewardship Agent reduces recommended treatment costs by up to 70\% through biosimilar substitution while maintaining clinical equivalence.
+We present preliminary observations from 10 clinically diverse synthetic cases spanning genomic complexity (KRAS G12C+ NSCLC), financial constraints (rural HER2-equivocal breast cancer), and rare presentations (pediatric GBM with H3 G34R). \textbf{These observations are from informal developer testing and have not been validated through rigorous clinical evaluation.} The Stewardship Agent demonstrates the ability to surface biosimilar alternatives and cost considerations relevant to Indian healthcare contexts.
 
-We demonstrate that treating tumor boards as \textit{scientific simulations} rather than conversations---decoupling data ingestion from deliberation, enforcing adversarial critique, and grounding decisions in verified evidence---creates AI systems trustworthy for life-or-death decisions in resource-constrained settings.
+We propose that treating tumor boards as \textit{scientific simulations} rather than conversations---decoupling data ingestion from deliberation, enforcing adversarial critique, and grounding decisions in verified evidence---offers a promising architectural approach for clinical AI systems. \textbf{Formal clinical validation is required before any claims about accuracy or safety can be made.}
 
 \vspace{0.5em}
 \noindent\textbf{Keywords:} Multi-agent systems, Clinical decision support, Precision oncology, LLM safety, Global health equity, Tumor boards, RAG, Multimodal AI
@@ -702,25 +702,30 @@ We stress-tested the system against 10 synthetic cases representing common India
 
 \subsection{Results}
 
-\subsubsection{Overall Performance}
+\begin{tcolorbox}[colback=warnorange!10, colframe=warnorange, title=\textbf{Important: Preliminary Observations Only}]
+\textbf{The metrics below are from informal developer testing on 10 synthetic cases and have NOT been validated through rigorous clinical evaluation.} These observations are presented to illustrate the system's intended behavior and evaluation framework---not as validated performance claims. Formal validation with oncologist review is required before any claims about clinical utility can be made.
+\end{tcolorbox}
+
+\subsubsection{Preliminary Observations (Unvalidated)}
 
 \begin{table}[H]
 \centering
-\caption{System Performance Metrics}
+\caption{Evaluation Framework and Preliminary Observations}
 \label{tab:results}
-\begin{tabular}{@{}lc@{}}
+\begin{tabular}{@{}lp{7cm}@{}}
 \toprule
-\textbf{Metric} & \textbf{Result} \\
+\textbf{Evaluation Dimension} & \textbf{Observation (Informal Testing)} \\
 \midrule
-Guideline-compliant plans & 92\% (46/50 decisions) \\
-Safety risks identified & 100\% (all contraindications flagged) \\
-Financial considerations integrated & 100\% (all cases) \\
-Biomarker extraction accuracy (MARC-v1) & 97.3\% (validated against source) \\
-Time to first recommendation & <30 seconds \\
-Full deliberation completion & <5 minutes \\
+Guideline citation presence & System generates citations to NCCN, ESMO, ASTRO in most responses; accuracy of citations not yet validated \\
+Safety consideration integration & Contraindications and drug interactions mentioned when present in case data; completeness not validated \\
+Financial context (Indian) & PMJAY, biosimilar options surfaced when relevant; appropriateness requires oncologist review \\
+MARC-v1 extraction & Retry mechanism observed to self-correct some extraction errors; accuracy rate not formally measured \\
+Response time & First agent response typically within 30--60 seconds; full deliberation 3--8 minutes (depends on case complexity) \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\textit{Note: Formal validation methodology with oncologist adjudication is outlined in Section 5.2 but has not yet been executed. The 10 demo cases are synthetic and do not constitute a validation dataset.}
 
 \subsubsection{Case Study: Lung NSCLC (Case 1)}
 
@@ -743,44 +748,47 @@ Full deliberation completion & <5 minutes \\
 \begin{itemize}[noitemsep]
     \item \textbf{MARC-v1 Extraction}: Correctly captured ``HER2 Equivocal'' despite multiple retry attempts where the model initially extracted ``HER2 Positive''
     \item \textbf{Pathologist}: Recommended FISH confirmation before anti-HER2 therapy
-    \item \textbf{Stewardship} (after FISH+ confirmed): Explicitly recommended Biosimilar Trastuzumab, calculating Rs.\ 4.2 lakh savings over 12-month treatment
+    \item \textbf{Stewardship} (after FISH+ confirmed): Surfaced biosimilar Trastuzumab option with estimated cost comparison (based on current Indian market prices)
 \end{itemize}
 
-\textbf{Assessment}: MARC-v1 loop prevented inappropriate immediate Trastuzumab prescription. Stewardship integration achieved 70\% cost reduction with equivalent efficacy.
+\textbf{Observation}: In this synthetic case, the MARC-v1 loop behavior was observed to retry extraction when ``HER2 Equivocal'' was initially misclassified. The Stewardship agent surfaced biosimilar options with estimated cost comparisons. \textit{Note: The clinical appropriateness of these outputs has not been validated by oncologists.}
 
-\subsubsection{Error Analysis}
+\subsubsection{Observed Failure Modes (Informal Testing)}
 
-The 8\% of non-compliant decisions (4/50) occurred in:
+During informal developer testing, the following failure patterns were observed:
 
 \begin{itemize}[noitemsep]
-    \item \textbf{Rare variants}: Novel fusion partners not well-represented in training data
-    \item \textbf{Conflicting guidelines}: Cases where NCCN and ESMO recommendations differed
-    \item \textbf{Edge staging}: T4N0M0 presentations with ambiguous resectability
+    \item \textbf{Rare variants}: Novel fusion partners sometimes not correctly interpreted
+    \item \textbf{Conflicting guidelines}: Cases where NCCN and ESMO recommendations differed led to inconsistent outputs
+    \item \textbf{Edge staging}: Ambiguous staging scenarios sometimes produced uncertain recommendations
 \end{itemize}
 
-All non-compliant decisions were flagged by the Scientific Critic for human review, demonstrating the safety value of adversarial architecture.
+The Scientific Critic was observed to flag some uncertain cases for human review. \textit{However, the completeness and reliability of this safety mechanism has not been formally evaluated.}
 
-\subsection{Ablation Studies}
+\subsection{Proposed Ablation Framework}
+
+\begin{tcolorbox}[colback=warnorange!10, colframe=warnorange, title=\textbf{Note: Ablation Not Yet Conducted}]
+The table below outlines the \textbf{proposed ablation study design}, not actual experimental results. Formal ablation studies are planned as part of future clinical validation work.
+\end{tcolorbox}
 
 \begin{table}[H]
 \centering
-\caption{Impact of Architectural Components}
+\caption{Proposed Ablation Study Design (Not Yet Executed)}
 \label{tab:ablation}
-\begin{tabular}{@{}lcc@{}}
+\begin{tabular}{@{}lp{8cm}@{}}
 \toprule
-\textbf{Configuration} & \textbf{Guideline Compliance} & \textbf{Safety Flags} \\
+\textbf{Configuration} & \textbf{Hypothesized Impact} \\
 \midrule
-Full system & 92\% & 100\% \\
-Without MARC-v1 & 78\% & 85\% \\
-Without Scientific Critic & 84\% & 71\% \\
-Without Stewardship & 92\% & 100\%$^*$ \\
-Single-agent baseline & 67\% & 52\% \\
+Full system & Baseline for comparison \\
+Without MARC-v1 & Expected: Increased extraction errors propagating to downstream agents \\
+Without Scientific Critic & Expected: Reduced adversarial challenge to recommendations \\
+Without Stewardship & Expected: No impact on clinical content; financial considerations absent \\
+Single-agent baseline & Expected: Loss of multi-disciplinary perspective \\
 \bottomrule
-\multicolumn{3}{l}{\footnotesize $^*$Clinical safety maintained; financial toxicity not assessed}
 \end{tabular}
 \end{table}
 
-The MARC-v1 verification loop provides the largest individual contribution to system accuracy, preventing downstream errors from propagating through deliberation. The Scientific Critic is essential for safety flag generation.
+Based on architectural design, we hypothesize that the MARC-v1 verification loop and Scientific Critic components are most critical for preventing downstream errors. \textbf{These hypotheses require formal testing to validate.}
 
 % ============================================================================
 % 6. DISCUSSION
@@ -790,14 +798,16 @@ The MARC-v1 verification loop provides the largest individual contribution to sy
 
 \subsection{The ``Virtual Lab'' Paradigm}
 
-Our transition from conversational AI to the Virtual Lab paradigm reflects a broader shift in medical AI design philosophy. By treating the tumor board as a \textit{scientific simulation} rather than a conversation, we achieve:
+Our transition from conversational AI to the Virtual Lab paradigm reflects a broader shift in medical AI design philosophy. By treating the tumor board as a \textit{scientific simulation} rather than a conversation, we \textbf{hypothesize} the following benefits (requiring validation):
 
 \begin{enumerate}
-    \item \textbf{Reduced Hallucination}: MARC-v1 loops prevent the system from inventing patient data
-    \item \textbf{Safety-First Architecture}: Adversarial structure ensures dangerous interactions are caught
-    \item \textbf{Economic Reality Integration}: Stewardship brings the India Context into clinical algorithms
-    \item \textbf{Auditability}: Every recommendation traces to specific guideline citations
+    \item \textbf{Reduced Hallucination}: MARC-v1 loops are designed to prevent the system from inventing patient data
+    \item \textbf{Safety-First Architecture}: Adversarial structure is intended to catch potentially dangerous recommendations
+    \item \textbf{Economic Reality Integration}: Stewardship is designed to bring the India Context into clinical algorithms
+    \item \textbf{Auditability}: The system is designed to trace recommendations to specific guideline citations
 \end{enumerate}
+
+\textit{Note: These design goals have not yet been empirically validated.}
 
 \subsection{Comparison with Human Tumor Boards}
 
@@ -850,9 +860,9 @@ The Stewardship Agent represents a first step toward \textit{context-aware AI} t
 \section{Conclusion}
 \label{sec:conclusion}
 
-The Agentic Virtual Tumor Board demonstrates that ``AI Safety'' in medicine extends beyond preventing toxic speech---it requires \textbf{architectural rigor}. By decoupling Ingestion (Reliability) from Reasoning (Adversarial Debate), and grounding decisions in multimodal evidence, we build systems that can be trusted with life-or-death decisions.
+The Agentic Virtual Tumor Board proposes that ``AI Safety'' in medicine extends beyond preventing toxic speech---it requires \textbf{architectural rigor}. By decoupling Ingestion (Reliability) from Reasoning (Adversarial Debate), and grounding decisions in multimodal evidence, we hypothesize that such systems could eventually support clinical decision-making.
 
-Our 92\% success rate on guideline-compliant, financially viable treatment plans---achieved through verified data extraction, adversarial critique, and stewardship integration---suggests that the Gen-2 Agentic paradigm offers a viable path toward democratizing precision oncology.
+\textbf{We emphasize that this system has not been clinically validated.} The architectural components presented---verified data extraction, adversarial critique, and stewardship integration---represent a proposed framework that requires rigorous prospective evaluation before any claims about clinical utility can be made. Our preliminary observations on synthetic cases are intended to illustrate the system's intended behavior, not to demonstrate validated performance.
 
 For the 77\% of Indian cancer patients without access to multidisciplinary tumor boards, this work represents not merely a technical contribution, but a step toward health equity. When a rural patient with HER2-equivocal breast cancer can receive the same deliberative process as a patient at a tertiary cancer center---with appropriate cost considerations---we move closer to the vision of precision oncology for all.
 
