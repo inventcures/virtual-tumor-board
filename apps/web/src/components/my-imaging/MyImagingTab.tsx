@@ -9,8 +9,9 @@ import { useState, useCallback } from "react";
 import { 
   Upload, Camera, Image as ImageIcon, Disc, 
   FolderOpen, Smartphone, AlertCircle, CheckCircle,
-  Loader2, X, ChevronRight
+  Loader2, X, ChevronRight, LineChart, Layers
 } from "lucide-react";
+import { LongitudinalViewer } from "@/components/longitudinal";
 import { ImagingUploadPanel } from "./ImagingUploadPanel";
 import { DicomUploader } from "./DicomUploader";
 import { CameraCapture } from "./CameraCapture";
@@ -26,6 +27,7 @@ import {
 } from "@/types/imaging";
 
 type UploadMethod = 'select' | 'dicom' | 'camera' | 'gallery';
+type ViewTab = 'upload' | 'longitudinal';
 
 interface MyImagingTabProps {
   caseId?: string;
@@ -33,6 +35,7 @@ interface MyImagingTabProps {
 }
 
 export function MyImagingTab({ caseId, onImagingReady }: MyImagingTabProps) {
+  const [activeTab, setActiveTab] = useState<ViewTab>('upload');
   const [uploadMethod, setUploadMethod] = useState<UploadMethod>('select');
   const [currentStudy, setCurrentStudy] = useState<ImagingStudy | null>(null);
   const [medgemmaAnalysis, setMedgemmaAnalysis] = useState<MedGemmaResponse | null>(null);
@@ -265,8 +268,49 @@ export function MyImagingTab({ caseId, onImagingReady }: MyImagingTabProps) {
   // Main Content
   return (
     <div className="space-y-6">
-      {/* Current Study & Analysis View */}
-      {currentStudy && (
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-slate-700 pb-3">
+        <button
+          onClick={() => setActiveTab('upload')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'upload'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          <Upload className="w-4 h-4" />
+          Upload Scans
+        </button>
+        <button
+          onClick={() => setActiveTab('longitudinal')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'longitudinal'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          <LineChart className="w-4 h-4" />
+          Progression Tracking
+          <span className="px-1.5 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-300">
+            New
+          </span>
+        </button>
+      </div>
+
+      {/* Longitudinal Viewer Tab */}
+      {activeTab === 'longitudinal' && (
+        <div className="h-[700px]">
+          <LongitudinalViewer
+            onBack={() => setActiveTab('upload')}
+          />
+        </div>
+      )}
+
+      {/* Upload Tab Content */}
+      {activeTab === 'upload' && (
+        <>
+          {/* Current Study & Analysis View */}
+          {currentStudy && (
         <div className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-slate-700">
@@ -387,15 +431,17 @@ export function MyImagingTab({ caseId, onImagingReady }: MyImagingTabProps) {
         </>
       )}
 
-      {/* Add Another Scan */}
-      {currentStudy && !isAnalyzing && (
-        <button
-          onClick={handleReset}
-          className="w-full py-3 border-2 border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-2"
-        >
-          <Upload className="w-5 h-5" />
-          Upload Another Scan
-        </button>
+          {/* Add Another Scan */}
+          {currentStudy && !isAnalyzing && (
+            <button
+              onClick={handleReset}
+              className="w-full py-3 border-2 border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-2"
+            >
+              <Upload className="w-5 h-5" />
+              Upload Another Scan
+            </button>
+          )}
+        </>
       )}
     </div>
   );
