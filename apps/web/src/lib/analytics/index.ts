@@ -46,5 +46,17 @@ export {
   getCountryFlag,
 } from './geolocation';
 
+// MARC-v1 reliability loop analytics
+export {
+  logMARCEvent,
+  getMARCEvents,
+  getMARCSummary,
+} from './marc-analytics';
+
+export type {
+  MARCExtractionEvent,
+  MARCAnalyticsSummary,
+} from './marc-analytics';
+
 // NOTE: persistentStore and getTodayDate are SERVER-ONLY
 // Import directly: import { persistentStore, getTodayDate } from '@/lib/analytics/db';

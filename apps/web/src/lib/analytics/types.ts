@@ -87,6 +87,7 @@ export type FeatureType =
   | 'imaging_analysis'
   | 'oncoseg'
   | 'document_upload'
+  | 'document_extraction'  // MARC-v1 reliability loop extraction
   | 'collaboration'
   | 'case_view'
   | 'demo';

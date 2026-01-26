@@ -22,6 +22,7 @@ import {
   getCachedResult,
   cacheResult,
 } from "@/lib/cache/document-cache";
+import { logMARCEvent } from "@/lib/analytics/marc-analytics";
 
 export const runtime = "edge";
 export const maxDuration = 60;
@@ -584,6 +585,31 @@ export async function POST(request: NextRequest) {
     }
 
     const documentId = `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const processingTimeMs = Date.now() - startTime;
+
+    // Log MARC analytics event
+    try {
+      logMARCEvent({
+        documentType: classifiedType,
+        documentId,
+        fileSize: fileBase64.length,
+        qualityThreshold,
+        maxIterations,
+        reliabilityLoopEnabled: enableReliabilityLoop,
+        finalScore: reliabilityLoopMetadata.finalScore,
+        iterations: reliabilityLoopMetadata.iterations,
+        metThreshold: reliabilityLoopMetadata.metThreshold,
+        stoppedReason: reliabilityLoopMetadata.stoppedReason,
+        completenessScore: reliabilityLoopMetadata.scoreBreakdown?.completeness,
+        accuracyScore: reliabilityLoopMetadata.scoreBreakdown?.accuracy,
+        consistencyScore: reliabilityLoopMetadata.scoreBreakdown?.consistency,
+        clinicalValidityScore: reliabilityLoopMetadata.scoreBreakdown?.clinicalValidity,
+        processingTimeMs,
+      });
+    } catch (analyticsError) {
+      // Don't fail the request if analytics fails
+      console.warn('[MARC V2] Analytics logging failed:', analyticsError);
+    }
 
     // Cache if not using reliability loop
     if (!enableReliabilityLoop && !documentTypeOverride) {
@@ -593,7 +619,7 @@ export async function POST(request: NextRequest) {
         extractedData,
         textLength: extractedText.length,
         warnings,
-      }, Date.now() - startTime);
+      }, processingTimeMs);
     }
 
     return NextResponse.json({
@@ -605,7 +631,7 @@ export async function POST(request: NextRequest) {
       textLength: extractedText.length,
       reliabilityLoop: reliabilityLoopMetadata,
       cached: false,
-      processingTimeMs: Date.now() - startTime,
+      processingTimeMs,
     });
 
   } catch (error) {

@@ -214,6 +214,7 @@ export const analyticsStore: AnalyticsStore = {
       imaging_analysis: { count: 0, successRate: 0 },
       oncoseg: { count: 0, successRate: 0 },
       document_upload: { count: 0, successRate: 0 },
+      document_extraction: { count: 0, successRate: 0 },
       collaboration: { count: 0, successRate: 0 },
       case_view: { count: 0, successRate: 0 },
       demo: { count: 0, successRate: 0 },
