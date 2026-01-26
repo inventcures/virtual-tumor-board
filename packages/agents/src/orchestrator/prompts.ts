@@ -10,6 +10,9 @@ import { PALLIATIVE_CARE_PROMPT } from "../specialists/palliative-care";
 import { RADIOLOGIST_PROMPT } from "../specialists/radiologist";
 import { PATHOLOGIST_PROMPT } from "../specialists/pathologist";
 import { GENETICIST_PROMPT } from "../specialists/geneticist";
+import { SCIENTIFIC_CRITIC_PROMPT } from "../specialists/scientific-critic";
+import { STEWARDSHIP_PROMPT } from "../specialists/stewardship";
+import { PRINCIPAL_INVESTIGATOR_PROMPT } from "../specialists/principal-investigator";
 
 /**
  * Map of agent IDs to their system prompts
@@ -22,6 +25,9 @@ const AGENT_PROMPTS: Record<AgentId, string> = {
   "radiologist": RADIOLOGIST_PROMPT,
   "pathologist": PATHOLOGIST_PROMPT,
   "geneticist": GENETICIST_PROMPT,
+  "scientific-critic": SCIENTIFIC_CRITIC_PROMPT,
+  "stewardship": STEWARDSHIP_PROMPT,
+  "principal-investigator": PRINCIPAL_INVESTIGATOR_PROMPT,
 };
 
 /**

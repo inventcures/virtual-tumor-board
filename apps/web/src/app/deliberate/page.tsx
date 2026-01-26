@@ -23,16 +23,29 @@ import { getCancerSiteById, DOCUMENT_TYPE_LABELS } from "@/lib/upload/constants"
 
 // Agent definitions
 const AGENTS = [
+  { id: "principal-investigator", name: "Dr. Adhyaksha", specialty: "Chairperson", color: "moderator", icon: "🌟" },
   { id: "surgical-oncologist", name: "Dr. Shalya", specialty: "Surgical Oncology", color: "surgical", icon: "🔪" },
   { id: "medical-oncologist", name: "Dr. Chikitsa", specialty: "Medical Oncology", color: "medical", icon: "💊" },
   { id: "radiation-oncologist", name: "Dr. Kirann", specialty: "Radiation Oncology", color: "radiation", icon: "☢️" },
-  { id: "palliative-care", name: "Dr. Shanti", specialty: "Palliative Care", color: "palliative", icon: "🕊️" },
   { id: "radiologist", name: "Dr. Chitran", specialty: "Onco-Radiology", color: "radiology", icon: "📷" },
   { id: "pathologist", name: "Dr. Marga", specialty: "Pathology", color: "pathology", icon: "🔬" },
+  { id: "scientific-critic", name: "Dr. Tark", specialty: "Scientific Safety", color: "critic", icon: "🛡️" },
+  { id: "stewardship", name: "Dr. Samata", specialty: "Patient Advocate", color: "stewardship", icon: "⚖️" },
+  { id: "palliative-care", name: "Dr. Shanti", specialty: "Palliative Care", color: "palliative", icon: "🕊️" },
   { id: "geneticist", name: "Dr. Anuvamsha", specialty: "Genetics", color: "genetics", icon: "🧬" },
 ];
 
-type Phase = "idle" | "initializing" | "round1" | "round2" | "consensus" | "completed" | "error";
+type Phase = 
+  | "idle" 
+  | "initializing" 
+  | "gatekeeper_check"
+  | "independent_hypothesis" // Round 1
+  | "scientific_critique"    // Round 2
+  | "round2_debate"          // Round 3
+  | "round3_consensus"       // Consensus
+  | "completed" 
+  | "error";
+
 type AgentStatus = "pending" | "active" | "streaming" | "complete";
 
 interface AgentResponse {
@@ -388,7 +401,7 @@ export default function DeliberatePage() {
         </div>
 
         {/* Consensus Panel */}
-        {(phase === "consensus" || phase === "completed") && (
+        {(phase === "round3_consensus" || phase === "completed") && (
           <ConsensusPanel 
             consensus={consensus} 
             isComplete={phase === "completed"}
@@ -465,20 +478,32 @@ export default function DeliberatePage() {
 function PhaseIndicator({ phase }: { phase: Phase }) {
   return (
     <div className="flex items-center gap-2">
-      {phase === "initializing" ? (
+      {phase === "initializing" || phase === "gatekeeper_check" ? (
         <>
           <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
-          <span className="text-indigo-400 font-medium">Initializing AI agents...</span>
+          <span className="text-indigo-400 font-medium">
+            {phase === "gatekeeper_check" ? "Dr. Adhyaksha reviewing case..." : "Initializing AI agents..."}
+          </span>
         </>
-      ) : phase === "round1" ? (
+      ) : phase === "independent_hypothesis" ? (
         <>
           <Activity className="w-5 h-5 text-amber-400 animate-pulse" />
-          <span className="text-amber-400 font-medium">Specialists analyzing case...</span>
+          <span className="text-amber-400 font-medium">Specialists thinking independently...</span>
         </>
-      ) : phase === "consensus" ? (
+      ) : phase === "scientific_critique" ? (
         <>
-          <Activity className="w-5 h-5 text-purple-400 animate-pulse" />
-          <span className="text-purple-400 font-medium">Building consensus...</span>
+          <AlertTriangle className="w-5 h-5 text-rose-400 animate-pulse" />
+          <span className="text-rose-400 font-medium">Safety & Cost Review...</span>
+        </>
+      ) : phase === "round2_debate" ? (
+        <>
+          <Brain className="w-5 h-5 text-blue-400 animate-pulse" />
+          <span className="text-blue-400 font-medium">Chain of Debate...</span>
+        </>
+      ) : phase === "round3_consensus" ? (
+        <>
+          <FileText className="w-5 h-5 text-purple-400 animate-pulse" />
+          <span className="text-purple-400 font-medium">Building Consensus...</span>
         </>
       ) : phase === "completed" ? (
         <>
