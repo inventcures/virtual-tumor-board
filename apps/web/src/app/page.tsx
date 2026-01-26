@@ -141,8 +141,9 @@ export default function LandingPage() {
                 </h2>
                 <p className="text-slate-400 text-sm sm:text-base leading-relaxed mb-4">
                   <strong className="text-white">"Agentic Virtual Tumor Board"</strong> — Our technical paper detailing 
-                  the MAI-DxO adversarial deliberation framework, MARC reliability loops (97.3% accuracy), 
-                  MedGemma multimodal integration, and comprehensive evaluation methodology.
+                  the MAI-DxO adversarial deliberation framework, MARC reliability loops, 
+                  MedGemma multimodal integration, and proposed evaluation methodology. 
+                  <em className="text-amber-400">(Early-stage research, not yet clinically validated)</em>
                 </p>
                 
                 <div className="flex flex-wrap gap-2 mb-5">
