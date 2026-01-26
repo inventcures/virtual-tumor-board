@@ -11,6 +11,7 @@ export const SURGICAL_ONCOLOGIST: AgentPersona = {
   personality: "Pragmatic, outcomes-focused, considers functional preservation",
   primaryGuideline: "nccn",
   secondaryGuidelines: [],
+  domains: ["surgical_resectability"],
   evaluationFramework: [
     "RESECTABILITY: Is this surgically resectable? R0 possible?",
     "OPERABILITY: Patient fitness (ECOG, comorbidities)?",

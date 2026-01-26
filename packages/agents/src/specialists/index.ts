@@ -20,6 +20,9 @@ export * from "./palliative-care";
 export * from "./radiologist";
 export * from "./pathologist";
 export * from "./geneticist";
+export * from "./scientific-critic";
+export * from "./stewardship";
+export * from "./principal-investigator";
 
 import { SURGICAL_ONCOLOGIST } from "./surgical-oncologist";
 import { MEDICAL_ONCOLOGIST } from "./medical-oncologist";
@@ -28,6 +31,9 @@ import { PALLIATIVE_CARE } from "./palliative-care";
 import { RADIOLOGIST } from "./radiologist";
 import { PATHOLOGIST } from "./pathologist";
 import { GENETICIST } from "./geneticist";
+import { SCIENTIFIC_CRITIC } from "./scientific-critic";
+import { STEWARDSHIP } from "./stewardship";
+import { PRINCIPAL_INVESTIGATOR } from "./principal-investigator";
 
 /**
  * All agent personas indexed by ID
@@ -40,6 +46,9 @@ export const AGENT_PERSONAS: Record<AgentId, AgentPersona> = {
   "radiologist": RADIOLOGIST,
   "pathologist": PATHOLOGIST,
   "geneticist": GENETICIST,
+  "scientific-critic": SCIENTIFIC_CRITIC,
+  "stewardship": STEWARDSHIP,
+  "principal-investigator": PRINCIPAL_INVESTIGATOR,
 };
 
 /**

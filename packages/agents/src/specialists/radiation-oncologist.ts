@@ -11,6 +11,7 @@ export const RADIATION_ONCOLOGIST: AgentPersona = {
   personality: "Technical, precision-focused, considers quality of life and treatment burden",
   primaryGuideline: "astro",
   secondaryGuidelines: ["nccn"],
+  domains: ["radiation_safety"],
   evaluationFramework: [
     "RT INDICATION: Is RT indicated? Curative vs. palliative intent?",
     "TIMING: Definitive, adjuvant, neoadjuvant, or concurrent?",

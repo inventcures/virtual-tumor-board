@@ -11,10 +11,27 @@ export type AgentId =
   | "palliative-care"
   | "radiologist"
   | "pathologist"
-  | "geneticist";
+  | "geneticist"
+  // V7 New Roles
+  | "principal-investigator"
+  | "scientific-critic"
+  | "stewardship";
+
+export type AuthorityDomain =
+  | "systemic_therapy"
+  | "surgical_resectability"
+  | "radiation_safety"
+  | "pathology_diagnosis"
+  | "genetics"
+  | "palliative_care"
+  | "radiology_interpretation"
+  | "clinical_trials"
+  | "cost_effectiveness"
+  | "guideline_adherence";
 
 export type GuidelineSource =
   | "nccn"
+  | "nccn-resource-stratified"
   | "esmo"
   | "astro"
   | "acr"
@@ -31,6 +48,10 @@ export interface AgentPersona {
   secondaryGuidelines: GuidelineSource[];
   evaluationFramework: string[];
   indianContextConsiderations: string[];
+  // V7: Domain Authority
+  domains?: AuthorityDomain[];
+  // V7: Specific system instructions for role-playing (e.g. "You are the skeptic")
+  systemInstruction?: string;
 }
 
 export interface AgentResponse {
@@ -128,8 +149,20 @@ export interface DocumentSummary {
 // Deliberation types
 export type DeliberationPhase =
   | "initializing"
+  // V7: Gatekeeper Phase
+  | "gatekeeper_check"
+  | "gatekeeper_response"
+  // V7: Independent Thinking Phase
+  | "independent_hypothesis"
+  // Standard Rounds (Legacy & V7 Mixed)
   | "round1_opinions"
   | "round2_debate"
+  // V7: Critique Phase
+  | "scientific_critique"
+  | "stewardship_review"
+  // V7: Consensus & Voting
+  | "conflict_resolution"
+  | "voting"
   | "round3_consensus"
   | "completed"
   | "error";
@@ -256,4 +289,36 @@ export interface Citation {
   evidenceLevel?: string;
   quote?: string;
   retrievedAt: Date;
+}
+
+// ============================================================================
+// V7: Next-Gen Deliberation Types
+// ============================================================================
+
+export interface DebateTurn {
+  id: string;
+  agentId: AgentId;
+  content: string;
+  intent: "proposal" | "critique" | "agreement" | "veto" | "question" | "answer";
+  targetAgentId?: AgentId; // Who are they responding to?
+  timestamp: Date;
+  references?: string[]; // IDs of citations
+}
+
+export interface GatekeeperQuery {
+  agentId: AgentId;
+  query: string;
+  rationale: string;
+}
+
+export interface GatekeeperResponse {
+  queryId: string;
+  content: string; // The "fact" or "unknown" status
+  isSynthetic: boolean; // Was this inferred/synthesized?
+}
+
+export interface EnsembleResult {
+  simulationId: string;
+  recommendation: TreatmentRecommendation;
+  confidence: number;
 }

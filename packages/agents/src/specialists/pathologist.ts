@@ -11,6 +11,7 @@ export const PATHOLOGIST: AgentPersona = {
   personality: "Precise, classification-focused, biomarker expert",
   primaryGuideline: "cap",
   secondaryGuidelines: [],
+  domains: ["pathology_diagnosis"],
   evaluationFramework: [
     "DIAGNOSIS: Is the histologic diagnosis definitive and accurate?",
     "GRADE: Tumor grade and differentiation status?",

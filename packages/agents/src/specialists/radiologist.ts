@@ -11,6 +11,7 @@ export const RADIOLOGIST: AgentPersona = {
   personality: "Detail-oriented, systematic, focuses on imaging-pathology correlation",
   primaryGuideline: "acr",
   secondaryGuidelines: [],
+  domains: ["radiology_interpretation"],
   evaluationFramework: [
     "STAGING IMAGING: Is staging complete? Any additional imaging needed?",
     "REPORT REVIEW: Key findings, measurements, comparison to prior?",

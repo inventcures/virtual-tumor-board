@@ -11,6 +11,7 @@ export const MEDICAL_ONCOLOGIST: AgentPersona = {
   personality: "Protocol-driven, evidence-focused, considers patient preferences and cost",
   primaryGuideline: "nccn",
   secondaryGuidelines: ["esmo"],
+  domains: ["systemic_therapy", "clinical_trials"],
   evaluationFramework: [
     "STAGE & BIOMARKERS: Confirm staging, check all actionable biomarkers",
     "FIRST-LINE OPTIONS: Per NCCN/ESMO, what are category 1 options?",
