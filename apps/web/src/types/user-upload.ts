@@ -357,6 +357,42 @@ export interface UploadedImagingStudy {
   errorMessage?: string;
 }
 
+// =============================================================================
+// V7: MARC-v1 RELIABILITY LOOP TYPES
+// =============================================================================
+
+/**
+ * Metadata from MARC-v1 reliability loop execution
+ * Returned by /api/upload/process-v2 endpoint
+ */
+export interface ReliabilityLoopMetadata {
+  /** Whether the reliability loop was enabled for this extraction */
+  enabled: boolean;
+  /** Final quality score achieved (0-1) */
+  finalScore: number;
+  /** Number of extraction iterations performed */
+  iterations: number;
+  /** Whether the quality threshold was met */
+  metThreshold: boolean;
+  /** Reason the loop stopped (threshold met, max iterations, etc.) */
+  stoppedReason: string;
+  /** Breakdown of scores by dimension */
+  scoreBreakdown?: {
+    completeness: number;
+    accuracy: number;
+    consistency: number;
+    clinicalValidity: number;
+  };
+}
+
+/**
+ * Extended document with MARC-v1 reliability metadata
+ */
+export interface UploadedDocumentV7 extends UploadedDocument {
+  /** MARC-v1 reliability loop metadata (if process-v2 was used) */
+  reliabilityLoop?: ReliabilityLoopMetadata;
+}
+
 // Extended upload session with V6 imaging features
 export interface UploadSessionV6 extends UploadSessionV5 {
   // User-uploaded imaging (DICOM, camera, gallery)

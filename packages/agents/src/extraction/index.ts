@@ -46,5 +46,13 @@ export { ExtractionEvaluator } from './evaluator';
 // Optimizer
 export { ExtractionOptimizer } from './optimizer';
 
+// Reliability Loop
+export { 
+  ReliabilityLoop, 
+  createReliabilityLoop,
+  singlePassExtraction,
+} from './reliability-loop';
+export type { ExtractionFunction, ProgressCallback } from './reliability-loop';
+
 // Re-export for convenience
 export * from './types';
