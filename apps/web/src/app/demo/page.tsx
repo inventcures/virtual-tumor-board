@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { TumorBoardUI } from "@/components/TumorBoardUI";
 import { CaseSummary } from "@/components/CaseSummary";
 import { ImagingReviewTab } from "@/components/ImagingReviewTab";
 import { MyImagingTab } from "@/components/my-imaging";
-import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload, ScanLine, LineChart } from "lucide-react";
+import { DeliberationStream } from "@/components/DeliberationStream";
+import { UserRoleSelector, CoTToggle, RoleSelectionModal } from "@/components/UserRoleSelector";
+import { useUser } from "@/lib/user-context";
+import { Activity, Users, Brain, FileText, ChevronRight, ChevronLeft, Image, Stethoscope, Upload, ScanLine, LineChart, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { SAMPLE_CASES, SampleCase, CASE_SUMMARY } from "@/lib/sample-cases";
 
@@ -70,6 +73,25 @@ export default function Home() {
   const [deliberationStarted, setDeliberationStarted] = useState(false);
   const [deliberationKey, setDeliberationKey] = useState(0); // To force re-mount
   const [activeTab, setActiveTab] = useState<TabType>("case");
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  
+  // User context for CoT visibility
+  const { showDeliberationCoT, config: userConfig, role } = useUser();
+  
+  // Show role selection modal on first visit (check localStorage)
+  useEffect(() => {
+    const hasSelectedRole = localStorage.getItem("vtb-role-selected");
+    if (!hasSelectedRole) {
+      // Small delay so the page renders first
+      const timer = setTimeout(() => setShowRoleModal(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+  
+  const handleRoleModalClose = () => {
+    localStorage.setItem("vtb-role-selected", "true");
+    setShowRoleModal(false);
+  };
 
   const currentCase = SAMPLE_CASES[currentCaseIndex];
   const caseData = convertToCaseData(currentCase);
@@ -111,6 +133,11 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-4 text-sm text-slate-400">
+              {/* Role Selector - compact in header */}
+              <div className="relative">
+                <UserRoleSelector compact />
+              </div>
+              
               <Link 
                 href="/upload"
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-500 hover:to-teal-500 transition-all shadow-lg shadow-emerald-500/20"
@@ -356,13 +383,44 @@ export default function Home() {
             )}
           </>
         ) : (
-          <TumorBoardUI 
-            key={deliberationKey}
-            caseData={caseData} 
-            caseId={currentCase.id}
-            onRunAnother={handleRunAnother}
-          />
+          <div className={`${showDeliberationCoT ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : ''}`}>
+            {/* Main Tumor Board UI */}
+            <div className={showDeliberationCoT ? '' : ''}>
+              <TumorBoardUI 
+                key={deliberationKey}
+                caseData={caseData} 
+                caseId={currentCase.id}
+                onRunAnother={handleRunAnother}
+              />
+            </div>
+            
+            {/* V18 Deliberation Stream - Only shown when CoT is enabled */}
+            {showDeliberationCoT && (
+              <div className="lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-5 h-5 text-indigo-400" />
+                    <h3 className="text-sm font-semibold text-white">AI Thinking Process</h3>
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      Live
+                    </span>
+                  </div>
+                  <CoTToggle />
+                </div>
+                <DeliberationStream 
+                  caseId={currentCase.id}
+                  className="h-[calc(100%-3rem)]"
+                />
+              </div>
+            )}
+          </div>
         )}
+        
+        {/* Role Selection Modal */}
+        <RoleSelectionModal 
+          isOpen={showRoleModal} 
+          onClose={handleRoleModalClose} 
+        />
       </main>
 
       {/* Footer */}
