@@ -71,15 +71,27 @@ export class TumorBoardOrchestrator {
     this.log(`Active agents: ${agents.join(", ")}`);
 
     try {
-      // Phase 1: Round 1 - Initial Specialist Opinions
-      this.setPhase("round1_opinions", options.onPhaseChange);
+      // V7 Phase 0: Gatekeeper Check
+      // Ensure we have enough info to proceed. If missing, PI generates specific questions.
+      this.setPhase("gatekeeper_check", options.onPhaseChange);
+      const gatekeeperResult = await this.executeGatekeeper(caseData, options);
+      
+      // V7 Phase 1: Independent Hypothesis Generation (Round 1)
+      // Specialists generate plans in isolation to avoid groupthink.
+      this.setPhase("independent_hypothesis", options.onPhaseChange);
       const round1Results = await this.executeRound1(caseData, agents, options);
       
-      // Phase 2: Round 2 - Chain of Debate (if conflicts exist)
-      this.setPhase("round2_debate", options.onPhaseChange);
-      const round2Results = await this.executeRound2(caseData, round1Results, options);
+      // V7 Phase 2: Scientific Critique & Stewardship (New Round 2)
+      // Dr. Tark (Critic) and Dr. Samata (Stewardship) review the plans.
+      this.setPhase("scientific_critique", options.onPhaseChange);
+      const critiqueResults = await this.executeCritiqueRound(caseData, round1Results, options);
       
-      // Phase 3: Consensus Building
+      // V7 Phase 3: Debate & Conflict Resolution
+      // Specialists respond to critiques + PI applies domain veto.
+      this.setPhase("round2_debate", options.onPhaseChange);
+      const round2Results = await this.executeRound2(caseData, round1Results, critiqueResults, options);
+      
+      // V7 Phase 4: Consensus Building (PI Led)
       this.setPhase("round3_consensus", options.onPhaseChange);
       const consensus = await this.buildConsensus(caseData, round1Results, round2Results, options);
 
@@ -135,6 +147,29 @@ export class TumorBoardOrchestrator {
   }
 
   /**
+   * V7 Phase 0: Gatekeeper - Check for missing information
+   */
+  private async executeGatekeeper(
+    caseData: CaseData,
+    options: DeliberationOptions
+  ): Promise<{ passed: boolean; questions?: string[] }> {
+    this.log("=== PHASE 0: GATEKEEPER CHECK ===");
+    
+    // Consult PI to check for missing info
+    const piResponse = await this.consultAgent("principal-investigator", caseData, options);
+    
+    // In a real implementation, if missing info is critical, we might pause here.
+    // For now, we log it and proceed, letting agents make assumptions if needed.
+    const hasMissingInfo = piResponse.response.toLowerCase().includes("missing information");
+    
+    if (hasMissingInfo) {
+      this.log("Gatekeeper flagged missing info. Proceeding with assumptions.");
+    }
+
+    return { passed: !hasMissingInfo };
+  }
+
+  /**
    * Round 1: Get initial opinions from all specialists
    */
   private async executeRound1(
@@ -175,6 +210,44 @@ export class TumorBoardOrchestrator {
       endTime: new Date(),
       cost: totalCost,
     };
+  }
+
+  /**
+   * V7 Phase 2: Scientific Critique & Stewardship
+   */
+  private async executeCritiqueRound(
+    caseData: CaseData,
+    round1: { responses: Map<AgentId, AgentResponse> },
+    options: DeliberationOptions
+  ): Promise<{ responses: Map<AgentId, AgentResponse>; cost: number }> {
+    this.log("=== PHASE 2: CRITIQUE & STEWARDSHIP ===");
+    const responses = new Map<AgentId, AgentResponse>();
+    let totalCost = 0;
+
+    // 1. Scientific Critic (Dr. Tark)
+    // We inject the round 1 opinions into the case context for the critic
+    const criticResponse = await this.consultAgent("scientific-critic", {
+      ...caseData,
+      clinicalQuestion: `${caseData.clinicalQuestion}\n\n## PROPOSED PLANS TO CRITIQUE:\n${this.formatRound1ForPrompt(round1.responses)}`
+    }, options);
+    responses.set("scientific-critic", criticResponse);
+    totalCost += this.estimateCost(criticResponse.tokenUsage);
+
+    // 2. Stewardship (Dr. Samata)
+    const stewardshipResponse = await this.consultAgent("stewardship", {
+      ...caseData,
+      clinicalQuestion: `${caseData.clinicalQuestion}\n\n## PROPOSED PLANS TO REVIEW FOR COST/BURDEN:\n${this.formatRound1ForPrompt(round1.responses)}`
+    }, options);
+    responses.set("stewardship", stewardshipResponse);
+    totalCost += this.estimateCost(stewardshipResponse.tokenUsage);
+
+    return { responses, cost: totalCost };
+  }
+
+  private formatRound1ForPrompt(responses: Map<AgentId, AgentResponse>): string {
+    return Array.from(responses.entries())
+      .map(([id, r]) => `### ${AGENT_PERSONAS[id].name} (${AGENT_PERSONAS[id].specialty})\n${r.response}`)
+      .join("\n\n");
   }
 
   /**
@@ -300,11 +373,12 @@ Structure your response with clear recommendations and citations.`,
   }
 
   /**
-   * Round 2: Chain of Debate - Cross-specialty review
+   * Round 2: Chain of Debate - Cross-specialty review & Critique Response
    */
   private async executeRound2(
     caseData: CaseData,
     round1: { responses: Map<AgentId, AgentResponse> },
+    critique: { responses: Map<AgentId, AgentResponse> },
     options: DeliberationOptions
   ): Promise<{
     activeAgents: AgentId[];
@@ -314,81 +388,49 @@ Structure your response with clear recommendations and citations.`,
     endTime: Date;
     cost: number;
   } | null> {
-    this.log("=== ROUND 2: CHAIN OF DEBATE ===");
+    this.log("=== ROUND 2: CHAIN OF DEBATE & REBUTTAL ===");
     
     // Identify potential conflicts from Round 1
     const conflicts = this.identifyConflicts(round1.responses);
     
-    if (conflicts.length === 0) {
-      this.log("No significant conflicts identified. Skipping detailed debate.");
+    // Also check for Critical Vetoes from Dr. Tark
+    const criticResponse = critique.responses.get("scientific-critic");
+    const hasCriticObjection = criticResponse?.response.toLowerCase().includes("objection") || 
+                               criticResponse?.response.toLowerCase().includes("unsafe");
+
+    if (conflicts.length === 0 && !hasCriticObjection) {
+      this.log("No significant conflicts or safety objections. Skipping detailed debate.");
       return null;
     }
 
-    this.log(`Identified ${conflicts.length} areas for debate`);
+    this.log(`Identified ${conflicts.length} areas for debate + Critic Feedback`);
     
     const startTime = new Date();
     const responses = new Map<AgentId, AgentResponse>();
     let totalCost = 0;
 
-    // For simplicity, we'll have the medical oncologist moderate
-    // In a full implementation, this would involve back-and-forth between agents
-    const moderatorId: AgentId = "medical-oncologist";
+    // Use Principal Investigator (Dr. Adhyaksha) as Moderator
+    const moderatorId: AgentId = "principal-investigator";
     
     const conflictSummary = conflicts
       .map((c) => `- ${c.topic}: ${Array.from(c.positions.entries()).map(([a, p]) => `${AGENT_PERSONAS[a].name}: ${p}`).join(" vs ")}`)
       .join("\n");
 
-    const debateResponse = await this.client.messages.create({
-      model: this.config.model,
-      max_tokens: this.config.maxTokens,
-      system: `You are the Tumor Board Conductor, facilitating discussion between specialists.
-Your role is to identify common ground and help resolve disagreements based on evidence.`,
-      messages: [
-        {
-          role: "user",
-          content: `## AREAS OF DISAGREEMENT IN TUMOR BOARD DISCUSSION
+    const critiqueSummary = `
+### CRITIQUE (Dr. Tark)
+${critique.responses.get("scientific-critic")?.response || "None"}
 
-${conflictSummary}
+### STEWARDSHIP (Dr. Samata)
+${critique.responses.get("stewardship")?.response || "None"}
+`;
 
-## ROUND 1 SPECIALIST OPINIONS
+    const debateResponse = await this.consultAgent(moderatorId, {
+      ...caseData,
+      clinicalQuestion: `${caseData.clinicalQuestion}\n\n## DEBATE CONTEXT\n${conflictSummary}\n\n${critiqueSummary}`
+    }, options);
 
-${Array.from(round1.responses.entries())
-  .map(([id, r]) => `### ${AGENT_PERSONAS[id].name} (${AGENT_PERSONAS[id].specialty})\n${r.response.slice(0, 500)}...`)
-  .join("\n\n")}
-
----
-
-Please:
-1. Identify the key points of agreement across specialists
-2. Analyze the disagreements and their clinical implications  
-3. Suggest a path to resolution based on the evidence and guidelines cited
-4. Note any areas where patient preference should drive the decision`,
-        },
-      ],
-    });
-
-    const debateText = debateResponse.content
-      .filter((block): block is Anthropic.Messages.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
-
-    responses.set(moderatorId, {
-      agentId: moderatorId,
-      response: debateText,
-      citations: [],
-      confidence: "moderate",
-      toolsUsed: [],
-      tokenUsage: {
-        input: debateResponse.usage.input_tokens,
-        output: debateResponse.usage.output_tokens,
-      },
-      timestamp: new Date(),
-    });
-
-    totalCost = this.estimateCost({
-      input: debateResponse.usage.input_tokens,
-      output: debateResponse.usage.output_tokens,
-    });
+    responses.set(moderatorId, debateResponse);
+    totalCost = this.estimateCost(debateResponse.tokenUsage);
 
     return {
       activeAgents: [moderatorId],
