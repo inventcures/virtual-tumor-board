@@ -38,3 +38,8 @@ papers/
 .env.r2
 r2-credentials.txt
 .wrangler/
+docs/*.aux
+docs/*.out
+docs/*.toc
+docs/*.log
+docs/*.synctex.gz
