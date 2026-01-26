@@ -322,11 +322,11 @@ The Agentic Virtual Tumor Board creates a ``Virtual Lab'' where agents function 
 \node[above=0.1cm of phase3.north, font=\bfseries\small, text=primaryblue] {Phase 3: Multimodal Grounding (MedGemma)};
 
 \node[box, fill=accentteal!10] (imaging) at (-3,0.3) {DICOM\\Analysis};
-\node[box, fill=accentteal!10] (wsi) at (0,0.3) {WSI\\Pathology};
+\node[box, fill=mediumgray!30, draw=mediumgray, dashed] (wsi) at (0,0.3) {WSI\\Pathology$^\dagger$};
 \node[box, fill=accentteal!10] (reconcile) at (3,0.3) {Evidence\\Reconciliation};
 
 \draw[arrow] (imaging) -- (reconcile);
-\draw[arrow] (wsi) -- (reconcile);
+\draw[arrow, dashed, gray] (wsi) -- (reconcile);
 
 % Connections between phases
 \draw[arrow, primaryblue, thick] (verified.south) -- ++(0,-0.5) -| (surg.north);
@@ -336,8 +336,11 @@ The Agentic Virtual Tumor Board creates a ``Virtual Lab'' where agents function 
 \node[box, fill=primaryblue!20, minimum width=4cm] (output) at (0,-1.5) {Consensus Report\\with Citations};
 \draw[arrow, thick] (phase3.south) -- (output.north);
 
+% Legend for planned feature
+\node[font=\scriptsize, text=mediumgray, align=left] at (5.5,-1.5) {$^\dagger$\textit{Planned for}\\~~\textit{next release}};
+
 \end{tikzpicture}
-\caption{Three-phase architecture of the Agentic Virtual Tumor Board. Phase 1 ensures data reliability through evaluator-optimizer loops. Phase 2 enforces adversarial deliberation with specialized critic and stewardship agents. Phase 3 grounds decisions in multimodal imaging evidence.}
+\caption{Three-phase architecture of the Agentic Virtual Tumor Board. Phase 1 ensures data reliability through evaluator-optimizer loops. Phase 2 enforces adversarial deliberation with specialized critic and stewardship agents. Phase 3 grounds decisions in multimodal imaging evidence. \textit{Note: WSI Pathology integration (dashed box) is planned for a future release.}}
 \label{fig:architecture}
 \end{figure}
 
@@ -532,7 +535,7 @@ Text reports are lossy compressions of visual reality. A radiology report statin
 \toprule
 \textbf{Model} & \textbf{Modality} & \textbf{Use Case} \\
 \midrule
-MedGemma 1.5 4B & Multimodal & General imaging, WSI analysis \\
+MedGemma 1.5 4B & Multimodal & General radiology imaging analysis \\
 MedGemma 1 27B & Text + Multimodal & Complex reasoning, discrepancy resolution \\
 OncoSeg (MedSAM3) & 3D Segmentation & Tumor volumetry, RECIST measurements \\
 \bottomrule
@@ -838,6 +841,7 @@ The Stewardship Agent represents a first step toward \textit{context-aware AI} t
     \item \textbf{Patient-Facing Interface}: Simplified output for shared decision-making
     \item \textbf{Longitudinal Tracking}: Treatment response monitoring and plan adaptation
     \item \textbf{Ensemble Deliberation}: Multiple parallel VTB sessions with meta-consensus
+    \item \textbf{Collaborative WSI Pathology Review}: Integration of whole-slide image (WSI) viewing capabilities enabling oncologists, pathologists, and EHR systems to collaboratively review histopathology slides during tumor board deliberations. The Pathologist agent (Dr.\ Marga) would moderate AI-assisted analysis from pathology foundation models, facilitating structured debate on morphological features, grade assessment, and biomarker interpretation while maintaining human oversight of diagnostic conclusions
 \end{itemize}
 
 % ============================================================================
@@ -858,6 +862,34 @@ For the 77\% of Indian cancer patients without access to multidisciplinary tumor
 
 \noindent
 \textbf{Data Availability}: Evaluation conducted on synthetic cases; no patient data used.
+
+% ============================================================================
+% CLINICAL VALIDATION STATUS
+% ============================================================================
+\vspace{1.5em}
+\begin{tcolorbox}[
+    colback=warnorange!10,
+    colframe=warnorange,
+    title={\textbf{Clinical Validation Status}},
+    fonttitle=\bfseries,
+    arc=3mm
+]
+\textbf{Important Disclaimer:} This work represents \textbf{early-stage conceptual research} and has not yet undergone rigorous clinical validation. The evaluation metrics reported are based on synthetic cases and internal assessments.
+
+\vspace{0.5em}
+\textbf{Not for Clinical Use:} The Agentic Virtual Tumor Board is a research prototype intended to demonstrate architectural concepts for multi-agent clinical decision support. It should \textbf{not} be used for actual patient care decisions without physician oversight and independent verification.
+
+\vspace{0.5em}
+\textbf{Seeking Clinical Partnerships:} We are actively seeking collaborations with oncology departments and cancer centers in India and internationally to conduct rigorous prospective clinical validation studies. Interested institutions are invited to contact the corresponding author to discuss partnership opportunities for:
+\begin{itemize}[noitemsep, topsep=0pt]
+    \item Retrospective case review studies comparing VTB recommendations with actual MTB decisions
+    \item Prospective pilot studies with oncologist oversight and IRB approval
+    \item Multi-site validation across diverse healthcare settings
+\end{itemize}
+
+\vspace{0.3em}
+\noindent\textit{Contact: \texttt{spiff007@gmail.com} for collaboration inquiries.}
+\end{tcolorbox}
 
 % ============================================================================
 % REFERENCES
