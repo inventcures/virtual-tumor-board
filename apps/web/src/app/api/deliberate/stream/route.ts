@@ -68,9 +68,9 @@ async function generateAIDeliberation(sampleCase: SampleCase): Promise<CachedDel
     let response: string;
     try {
       const aiResponse = await callAI(
-        [{ role: "user", content: `${caseContext}\n\nYour task: ${config.prompt}\n\nProvide your specialist assessment.` }],
-        `You are ${config.name}, a ${config.specialty} specialist on a virtual tumor board. Be concise and evidence-based. Cite NCCN, ESMO, or other relevant guidelines. Consider Indian healthcare context.`,
-        { maxTokens: 1500 }
+        [{ role: "user", content: `${caseContext}\n\nYour task: ${config.prompt}\n\nProvide your COMPLETE specialist assessment with:\n1. Key findings analysis\n2. Treatment recommendations with rationale\n3. Specific guideline citations (NCCN, ESMO, SSO, ASTRO as appropriate)\n4. Indian healthcare context considerations\n5. Follow-up recommendations\n\nBe thorough - this will be included in the patient's tumor board report.` }],
+        `You are ${config.name}, a ${config.specialty} specialist on a virtual tumor board. Provide a comprehensive, evidence-based assessment. Cite specific guidelines (NCCN, ESMO, SSO, ASTRO). Consider Indian healthcare context including drug availability, costs, and PMJAY coverage.`,
+        { maxTokens: 3000 }
       );
       response = aiResponse.content;
     } catch (err) {
@@ -103,10 +103,10 @@ async function generateAIDeliberation(sampleCase: SampleCase): Promise<CachedDel
     const aiResponse = await callAI(
       [{
         role: "user",
-        content: `Case:\n${caseContext}\n\nSpecialist Opinions:\n${agentResponses.map(a => `## ${a.name} (${a.specialty})\n${a.response}`).join('\n\n')}\n\nSynthesize into a consensus recommendation.`,
+        content: `Case:\n${caseContext}\n\nSpecialist Opinions:\n${agentResponses.map(a => `## ${a.name} (${a.specialty})\n${a.response}`).join('\n\n')}\n\nSynthesize into a COMPREHENSIVE consensus recommendation including:\n1. Treatment Intent (Curative/Palliative)\n2. Primary Recommendation with full rationale\n3. Treatment Sequence (step-by-step plan)\n4. Key specialist agreements\n5. Any resolved disagreements\n6. Alternative options if primary not feasible\n7. Follow-up plan with timeline\n8. Indian healthcare context (costs, availability, PMJAY)\n9. Confidence level with explanation`,
       }],
-      `You are the Tumor Board Moderator. Synthesize all specialist opinions into a clear consensus recommendation. Include: 1) Key agreements 2) Resolved disagreements 3) Final recommendation 4) Follow-up plan. Consider Indian healthcare context.`,
-      { maxTokens: 2000 }
+      `You are the Tumor Board Moderator. Synthesize all specialist opinions into a detailed, actionable consensus recommendation. This will be the main treatment plan in the patient's report. Be thorough and specific.`,
+      { maxTokens: 4000 }
     );
     consensus = aiResponse.content;
   } catch (err) {
@@ -124,7 +124,229 @@ async function generateAIDeliberation(sampleCase: SampleCase): Promise<CachedDel
 }
 
 function generatePlaceholderAgentResponse(config: typeof AGENT_CONFIGS[0], sampleCase: SampleCase): string {
-  return `## ${config.specialty} Assessment
+  const biomarkerSummary = sampleCase.biomarkers
+    .map(b => `- ${b.name}: ${b.value}${b.actionable ? ' (Actionable)' : ''}`)
+    .join('\n');
+  
+  const mutationSummary = sampleCase.genomics.mutations
+    .map(m => `- ${m.gene} ${m.variant}${m.actionable ? ' (Actionable)' : ''}`)
+    .join('\n');
+
+  const specialtyContent: Record<string, string> = {
+    'surgical-oncologist': `## Surgical Oncology Assessment
+
+**Patient**: ${sampleCase.patient.name}, ${sampleCase.patient.age}yo ${sampleCase.patient.gender}
+**Diagnosis**: ${sampleCase.cancer.stage} ${sampleCase.cancer.type} - ${sampleCase.cancer.subtype}
+**Primary Site**: ${sampleCase.cancer.primarySite}
+
+### Surgical Considerations:
+
+1. **Resectability Assessment**
+   - Stage: ${sampleCase.cancer.stage} (${sampleCase.cancer.tnm.t}${sampleCase.cancer.tnm.n}${sampleCase.cancer.tnm.m})
+   - Histology: ${sampleCase.cancer.histology}
+   - Patient fitness: ECOG ${sampleCase.patient.ecog}
+
+2. **Key Surgical Points**
+${sampleCase.keyConsiderations.map(k => `   - ${k}`).join('\n')}
+
+3. **Recommended Approach**
+   - Treatment should be individualized based on tumor characteristics
+   - Consider patient's performance status and comorbidities: ${sampleCase.patient.comorbidities}
+   - Multidisciplinary discussion recommended before final surgical planning
+
+4. **Indian Healthcare Context**
+   - Consider availability of surgical expertise at patient's center
+   - Patient location: ${sampleCase.patient.location}
+   - Insurance: ${sampleCase.patient.insurance}
+
+*[Reference: NCCN ${sampleCase.cancer.type} Guidelines, SSO Surgical Principles]*`,
+
+    'medical-oncologist': `## Medical Oncology Assessment
+
+**Patient**: ${sampleCase.patient.name}, ${sampleCase.patient.age}yo ${sampleCase.patient.gender}
+**Diagnosis**: ${sampleCase.cancer.stage} ${sampleCase.cancer.type} - ${sampleCase.cancer.subtype}
+
+### Biomarker Profile:
+${biomarkerSummary}
+
+### Genomic Findings:
+${mutationSummary}
+${sampleCase.genomics.tmb ? `- TMB: ${sampleCase.genomics.tmb} mut/Mb` : ''}
+${sampleCase.genomics.msi ? `- MSI Status: ${sampleCase.genomics.msi}` : ''}
+
+### Treatment Considerations:
+
+1. **Systemic Therapy Options**
+   - Expected modalities: ${sampleCase.expectedModalities.join(', ')}
+   - Biomarker-driven decisions should guide therapy selection
+
+2. **Key Considerations**
+${sampleCase.keyConsiderations.map(k => `   - ${k}`).join('\n')}
+
+3. **Indian Healthcare Context**
+   - Insurance: ${sampleCase.patient.insurance}
+   - Location: ${sampleCase.patient.location}
+   - Consider drug availability and cost-effective alternatives
+   - Explore patient assistance programs for targeted/immunotherapy
+
+4. **Follow-up Recommendations**
+   - Regular monitoring per guidelines
+   - Reassess biomarkers as needed at progression
+
+*[Reference: NCCN ${sampleCase.cancer.type} Guidelines, ESMO Guidelines]*`,
+
+    'radiation-oncologist': `## Radiation Oncology Assessment
+
+**Patient**: ${sampleCase.patient.name}, ${sampleCase.patient.age}yo
+**Diagnosis**: ${sampleCase.cancer.stage} ${sampleCase.cancer.type}
+**Primary Site**: ${sampleCase.cancer.primarySite}
+
+### Radiation Therapy Considerations:
+
+1. **RT Indication Assessment**
+   - Stage: ${sampleCase.cancer.stage}
+   - TNM: ${sampleCase.cancer.tnm.t}${sampleCase.cancer.tnm.n}${sampleCase.cancer.tnm.m}
+   - Role of RT to be determined based on treatment intent
+
+2. **Technical Considerations**
+   - Technique: To be determined based on target volumes
+   - Consider patient's ability to tolerate daily treatment
+   - Motion management as appropriate for site
+
+3. **Key Points**
+${sampleCase.keyConsiderations.slice(0, 3).map(k => `   - ${k}`).join('\n')}
+
+4. **Indian Healthcare Context**
+   - RT availability at patient's location: ${sampleCase.patient.location}
+   - Consider travel logistics for daily treatment
+   - LINAC/technique availability varies by center
+
+*[Reference: ASTRO Guidelines, NCCN ${sampleCase.cancer.type} Guidelines]*`,
+
+    'pathologist': `## Pathology Assessment
+
+**Patient**: ${sampleCase.patient.name}
+**Diagnosis**: ${sampleCase.cancer.type} - ${sampleCase.cancer.subtype}
+
+### Pathology Findings:
+
+1. **Histopathology**
+   - Type: ${sampleCase.cancer.type}
+   - Subtype: ${sampleCase.cancer.subtype}
+   - Histology: ${sampleCase.cancer.histology}
+
+2. **Biomarker Status**
+${biomarkerSummary}
+
+3. **Molecular Profile**
+${mutationSummary}
+${sampleCase.genomics.tmb ? `   - TMB: ${sampleCase.genomics.tmb} mut/Mb` : ''}
+${sampleCase.genomics.msi ? `   - MSI: ${sampleCase.genomics.msi}` : ''}
+
+4. **Quality Assessment**
+   - Ensure adequate tissue for all required testing
+   - Archive tissue block for future testing if needed
+
+5. **Indian Healthcare Context**
+   - Biomarker testing available at major centers
+   - Consider reference lab validation for critical markers
+
+*[Reference: CAP ${sampleCase.cancer.type} Protocol, WHO Classification]*`,
+
+    'radiologist': `## Radiology Assessment
+
+**Patient**: ${sampleCase.patient.name}
+**Diagnosis**: ${sampleCase.cancer.stage} ${sampleCase.cancer.type}
+
+### Imaging Assessment:
+
+1. **Staging Summary**
+   - Stage: ${sampleCase.cancer.stage}
+   - TNM: ${sampleCase.cancer.tnm.t}${sampleCase.cancer.tnm.n}${sampleCase.cancer.tnm.m}
+   - Primary Site: ${sampleCase.cancer.primarySite}
+
+2. **Imaging Recommendations**
+   - Confirm staging completeness per guidelines
+   - Additional imaging as indicated for ${sampleCase.cancer.type}
+   - Response assessment plan per RECIST 1.1
+
+3. **Key Imaging Findings to Document**
+   - Primary tumor characteristics
+   - Nodal involvement
+   - Distant metastases status
+
+4. **Indian Healthcare Context**
+   - Consider imaging availability and costs
+   - Government facilities may offer cost reduction
+   - PET-CT availability limited to major centers
+
+*[Reference: ACR Appropriateness Criteria, RECIST 1.1]*`,
+
+    'geneticist': `## Genetics/Molecular Oncology Assessment
+
+**Patient**: ${sampleCase.patient.name}
+**Diagnosis**: ${sampleCase.cancer.type} - ${sampleCase.cancer.subtype}
+
+### Somatic Mutation Analysis:
+${mutationSummary}
+
+### Biomarker Summary:
+${biomarkerSummary}
+
+### TMB/MSI Status:
+${sampleCase.genomics.tmb ? `- TMB: ${sampleCase.genomics.tmb} mut/Mb` : '- TMB: Not assessed'}
+${sampleCase.genomics.msi ? `- MSI: ${sampleCase.genomics.msi}` : '- MSI: Not assessed'}
+
+### Therapeutic Implications:
+${sampleCase.genomics.mutations.filter(m => m.actionable).map(m => `- ${m.gene} ${m.variant}: Consider targeted therapy options`).join('\n') || '- Assess for actionable mutations based on testing'}
+
+### Germline Considerations:
+- Assess family history for hereditary cancer syndromes
+- Consider germline testing if indicated by tumor findings or family history
+
+### Indian Healthcare Context:
+- Drug availability for targeted therapies varies
+- Clinical trial opportunities at major centers
+- Consider cost and access when recommending specific agents
+
+*[Reference: OncoKB, CIViC Database, NCCN Biomarker Testing Guidelines]*`,
+
+    'palliative-care': `## Palliative Care Assessment
+
+**Patient**: ${sampleCase.patient.name}, ${sampleCase.patient.age}yo
+**Diagnosis**: ${sampleCase.cancer.stage} ${sampleCase.cancer.type}
+
+### Performance Status:
+- ECOG: ${sampleCase.patient.ecog}
+- Comorbidities: ${sampleCase.patient.comorbidities}
+
+### Quality of Life Considerations:
+
+1. **Symptom Assessment**
+   - Assess and manage disease-related symptoms
+   - Anticipate treatment-related side effects
+   - Nutritional support as needed
+
+2. **Psychosocial Support**
+   - Patient and family emotional support
+   - Financial counseling and navigation
+   - Caregiver support and education
+
+3. **Goals of Care**
+   - Treatment intent discussion based on staging
+   - Advance care planning
+   - Document patient preferences
+
+4. **Indian Healthcare Context**
+   - Family involvement in discussions (cultural norm)
+   - Identify primary caregiver
+   - Discuss treatment costs upfront
+   - Consider travel and lodging needs
+
+*[Reference: NCCN Supportive Care Guidelines, WHO Palliative Care]*`,
+  };
+
+  return specialtyContent[config.id] || `## ${config.specialty} Assessment
 
 **For**: ${sampleCase.patient.name}, ${sampleCase.cancer.stage} ${sampleCase.cancer.type}
 
@@ -134,12 +356,12 @@ function generatePlaceholderAgentResponse(config: typeof AGENT_CONFIGS[0], sampl
 - Histology: ${sampleCase.cancer.histology}
 
 ### Considerations:
-${sampleCase.keyConsiderations.slice(0, 2).map(k => `- ${k}`).join('\n')}
+${sampleCase.keyConsiderations.map(k => `- ${k}`).join('\n')}
 
 ### Recommendation:
 Treatment approach should be individualized based on MDT discussion.
 
-*[Placeholder - AI service unavailable]*`;
+*[AI service temporarily unavailable - showing template response]*`;
 }
 
 function generatePlaceholderConsensus(sampleCase: SampleCase): string {
