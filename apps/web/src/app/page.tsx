@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from "next/link";
 import { 
   Brain, 
@@ -33,6 +35,28 @@ const SPECIALISTS = [
 ];
 
 export default function LandingPage() {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const token = searchParams.get('token');
+    if (token) {
+      document.cookie = `vtb_auth_v2=${token}; path=/; max-age=${60 * 60 * 24 * 30}; secure; samesite=strict`;
+      window.location.href = window.location.pathname;
+    }
+  }, [searchParams]);
+
+  if (typeof document !== 'undefined' && !document.cookie.includes('vtb_auth_v2=')) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-3xl font-bold text-white mb-4">Access Restricted</h1>
+          <p className="text-slate-400 mb-6">This site is currently private. Please contact the owner for access.</p>
+          <p className="text-xs text-slate-600">Add ?token=YOUR_TOKEN to the URL to access</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       {/* Navigation */}
