@@ -153,16 +153,7 @@ export default function LandingPage() {
                   <span className="px-2 py-1 bg-slate-800 text-slate-300 text-xs rounded-md">Oncology AI</span>
                 </div>
                 
-                <a 
-                  href="https://inventcures.github.io/files/virtual-mtb/agentic_tumor_board_preprint_v11.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all"
-                >
-                  <FileDown className="w-5 h-5" />
-                  Download Preprint (PDF)
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+
               </div>
             </div>
           </div>
@@ -315,15 +306,6 @@ export default function LandingPage() {
                 simulating the nuanced deliberation of a tumor board. Built to democratize access to 
                 multi-disciplinary oncology thinking.
               </p>
-              <a 
-                href="https://inventcures.github.io/ai-powered-virtual-mtb/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 text-sm transition-colors"
-              >
-                Read more on inventcures.github.io
-                <ExternalLink className="w-4 h-4" />
-              </a>
             </div>
           </div>
         </div>
