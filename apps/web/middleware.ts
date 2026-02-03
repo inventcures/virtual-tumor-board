@@ -41,12 +41,16 @@ export async function middleware(request: NextRequest) {
   
   // Site-wide auth check (if SITE_ACCESS_TOKEN is set)
   const siteAccessToken = process.env.SITE_ACCESS_TOKEN;
+  console.log('[MIDDLEWARE] SITE_ACCESS_TOKEN set:', !!siteAccessToken, 'Path:', pathname);
+  
   if (siteAccessToken) {
     const authCookie = request.cookies.get('vtb_auth_token')?.value;
+    console.log('[MIDDLEWARE] Auth cookie present:', !!authCookie, 'Cookie matches token:', authCookie === siteAccessToken);
     
     if (authCookie !== siteAccessToken) {
       // Check query param for token (for initial access)
       const queryToken = request.nextUrl.searchParams.get('token');
+      console.log('[MIDDLEWARE] Query token present:', !!queryToken, 'Query token matches:', queryToken === siteAccessToken);
       if (queryToken === siteAccessToken) {
         // Set cookie and redirect without token in URL
         const response = NextResponse.redirect(new URL(pathname, request.url));
