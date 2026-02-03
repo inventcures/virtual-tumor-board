@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
   console.log('[MIDDLEWARE] SITE_ACCESS_TOKEN set:', !!siteAccessToken, 'Path:', pathname);
   
   if (siteAccessToken) {
-    const authCookie = request.cookies.get('vtb_auth_token')?.value;
+    const authCookie = request.cookies.get('vtb_auth_v2')?.value;
     console.log('[MIDDLEWARE] Auth cookie present:', !!authCookie, 'Cookie matches token:', authCookie === siteAccessToken);
     
     if (authCookie !== siteAccessToken) {
@@ -54,7 +54,7 @@ export async function middleware(request: NextRequest) {
       if (queryToken === siteAccessToken) {
         // Set cookie and redirect without token in URL
         const response = NextResponse.redirect(new URL(pathname, request.url));
-        response.cookies.set('vtb_auth_token', siteAccessToken, {
+        response.cookies.set('vtb_auth_v2', siteAccessToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'strict',
