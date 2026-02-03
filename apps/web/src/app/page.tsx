@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from "next/link";
 import { 
@@ -34,7 +34,7 @@ const SPECIALISTS = [
   { name: "Molecular/Genetics", icon: Dna, guidelines: "ACMG, AMP" },
 ];
 
-export default function LandingPage() {
+function LandingPageContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -50,8 +50,8 @@ export default function LandingPage() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="text-center max-w-md">
           <h1 className="text-3xl font-bold text-white mb-4">Access Restricted</h1>
-          <p className="text-slate-400 mb-6">This site is currently private. Please contact the owner for access.</p>
-          <p className="text-xs text-slate-600">Add ?token=YOUR_TOKEN to the URL to access</p>
+          <p className="text-slate-400 mb-6">This site is currently private. Please contact owner for access.</p>
+          <p className="text-xs text-slate-600">Add ?token=YOUR_TOKEN to URL to access</p>
         </div>
       </div>
     );
@@ -418,5 +418,17 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    }>
+      <LandingPageContent />
+    </Suspense>
   );
 }
