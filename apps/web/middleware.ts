@@ -39,6 +39,56 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
   
+  // Site-wide auth check (if SITE_ACCESS_TOKEN is set)
+  const siteAccessToken = process.env.SITE_ACCESS_TOKEN;
+  if (siteAccessToken) {
+    const authCookie = request.cookies.get('vtb_auth_token')?.value;
+    
+    if (authCookie !== siteAccessToken) {
+      // Check query param for token (for initial access)
+      const queryToken = request.nextUrl.searchParams.get('token');
+      if (queryToken === siteAccessToken) {
+        // Set cookie and redirect without token in URL
+        const response = NextResponse.redirect(new URL(pathname, request.url));
+        response.cookies.set('vtb_auth_token', siteAccessToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 60 * 60 * 24 * 30, // 30 days
+        });
+        return response;
+      }
+      
+      // Unauthorized - return simple auth page
+      return new NextResponse(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Access Restricted</title>
+          <style>
+            body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0; }
+            .container { text-align: center; padding: 2rem; }
+            h1 { margin: 0 0 1rem 0; }
+            p { color: #94a3b8; }
+            input { padding: 0.75rem; margin-right: 0.5rem; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: white; }
+            button { padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; }
+            button:hover { background: #4f46e5; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Access Restricted</h1>
+            <p>This site is currently private. Please contact the owner for access.</p>
+          </div>
+        </body>
+        </html>
+      `, { 
+        status: 401,
+        headers: { 'Content-Type': 'text/html' }
+      });
+    }
+  }
+  
   // Admin auth check
   if (ADMIN_PATHS.some(path => pathname.startsWith(path))) {
     const adminToken = request.cookies.get('vtb_admin_token')?.value;
