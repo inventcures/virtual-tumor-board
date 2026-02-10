@@ -8,6 +8,7 @@
 import { NextRequest } from "next/server";
 import { callAI, getAvailableProviders, AIResponse, AIError } from "@/lib/ai-service";
 import { getCaseById, SampleCase } from "@/lib/sample-cases";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "edge";
 
@@ -91,11 +92,22 @@ ${sampleCase.clinicalQuestion}
 }
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous";
+  const { allowed, retryAfterMs } = rateLimit(ip, { maxRequests: 5, windowMs: 300_000 });
+  if (!allowed) return rateLimitResponse(retryAfterMs);
+
   const encoder = new TextEncoder();
-  
+
   try {
     const { caseId, useAI = true } = await request.json();
-    
+
+    if (!caseId || typeof caseId !== "string" || caseId.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(caseId)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or missing caseId" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const sampleCase = getCaseById(caseId);
     if (!sampleCase) {
       return new Response(

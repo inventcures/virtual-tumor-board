@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { DocumentType, ExtractedClinicalData, DocumentClassification } from "@/types/user-upload";
+import { verifyApiAuth } from "@/lib/api-auth";
 import { 
   generateCacheKey, 
   getCachedResult, 
@@ -323,21 +324,32 @@ function redactPII(text: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   const startTime = Date.now();
-  
+
   try {
     const body = await request.json();
-    const { 
-      fileBase64, 
-      mimeType, 
-      filename, 
-      documentTypeOverride 
+    const {
+      fileBase64,
+      mimeType,
+      filename,
+      documentTypeOverride
     } = body;
 
     if (!fileBase64 || !mimeType || !filename) {
       return NextResponse.json(
         { error: "Missing required fields: fileBase64, mimeType, filename" },
         { status: 400 }
+      );
+    }
+
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB base64
+    if (fileBase64.length > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+        { status: 413 }
       );
     }
 

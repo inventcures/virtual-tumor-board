@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addAnnotation, removeAnnotation, broadcastToRoom } from '@/lib/collaboration/room-manager';
 import { Annotation } from '@/lib/collaboration/types';
+import { verifyApiAuth } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const { caseId, annotation } = await request.json() as { caseId: string; annotation: Annotation };
     
@@ -23,6 +27,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const { caseId, annotationId } = await request.json() as { caseId: string; annotationId: string };
     

@@ -10,12 +10,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  getOncoSegClient, 
+import {
+  getOncoSegClient,
   OncoSegCheckpoint,
   calculateTumorVolume,
-  CHECKPOINT_INFO 
+  CHECKPOINT_INFO
 } from '@/lib/oncoseg';
+import { verifyApiAuth } from '@/lib/api-auth';
 
 export const maxDuration = 120; // Allow 2 minutes for GPU inference
 
@@ -29,9 +30,12 @@ interface SegmentRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const body: SegmentRequest = await request.json();
-    
+
     if (!body.niftiBase64) {
       return NextResponse.json(
         { error: 'niftiBase64 is required' },

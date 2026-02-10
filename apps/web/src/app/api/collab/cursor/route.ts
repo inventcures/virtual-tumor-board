@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateCursor, broadcastToRoom } from '@/lib/collaboration/room-manager';
 import { CursorPosition } from '@/lib/collaboration/types';
+import { verifyApiAuth } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const { caseId, cursor } = await request.json() as { caseId: string; cursor: CursorPosition };
     

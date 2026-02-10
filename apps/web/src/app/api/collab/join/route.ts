@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addUserToRoom, getRoomState } from '@/lib/collaboration/room-manager';
 import { CollaborationUser } from '@/lib/collaboration/types';
+import { verifyApiAuth } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const { caseId, user } = await request.json() as { caseId: string; user: CollaborationUser };
     

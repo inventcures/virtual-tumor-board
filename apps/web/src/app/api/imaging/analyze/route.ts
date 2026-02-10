@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMedGemmaClient } from "@/lib/medgemma/client";
 import { MedGemmaImageInput, AnalysisContext } from "@/types/imaging";
+import { verifyApiAuth } from "@/lib/api-auth";
 
 export const maxDuration = 60; // Allow up to 60 seconds for analysis
 
@@ -21,9 +22,12 @@ interface AnalyzeRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const body: AnalyzeRequest = await request.json();
-    
+
     if (!body.imageData) {
       return NextResponse.json(
         { error: "imageData is required" },
@@ -76,18 +80,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Image analysis error:", error);
     
-    // Return a helpful error response
     return NextResponse.json(
-      { 
+      {
         error: "Analysis failed",
         message: error instanceof Error ? error.message : "Unknown error",
-        // Return demo response so UI still works
-        interpretation: "Analysis temporarily unavailable. Please try again.",
-        findings: [],
-        measurements: [],
-        impression: "Unable to analyze image at this time.",
-        recommendations: ["Please retry the analysis or check API configuration."],
-        confidence: 0.1,
       },
       { status: 500 }
     );

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { 
-  getCachedDeliberation, 
+import {
+  getCachedDeliberation,
   streamCachedDeliberation,
   streamV18Deliberation,
   isCaseCached,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/deliberation-cache";
 import { getCaseById, SampleCase } from "@/lib/sample-cases";
 import { callAI, getAvailableProviders } from "@/lib/ai-service";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "edge";
 
@@ -1046,13 +1047,24 @@ ${sampleCase.biomarkers.filter(b => b.actionable).map(b => `- ${b.name}: ${b.val
 }
 
 export async function GET(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous";
+  const { allowed, retryAfterMs } = rateLimit(ip, { maxRequests: 5, windowMs: 300_000 });
+  if (!allowed) return rateLimitResponse(retryAfterMs);
+
   const { searchParams } = new URL(request.url);
   const caseId = searchParams.get("caseId") || "lung-nsclc-kras-g12c";
   const forceRefresh = searchParams.get("refresh") === "true";
   const useV18Format = searchParams.get("v18") === "true";
-  
+
+  if (caseId.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(caseId)) {
+    return new Response(
+      JSON.stringify({ error: "Invalid caseId format" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   const encoder = new TextEncoder();
-  
+
   // Get or generate deliberation
   let deliberation = forceRefresh ? undefined : getCachedDeliberation(caseId);
   

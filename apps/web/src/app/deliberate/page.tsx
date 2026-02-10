@@ -2,16 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  Brain, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Loader2, 
+import {
+  Brain,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
   Activity,
   AlertCircle,
   FileText,
   ArrowLeft,
-  Download,
   RotateCcw,
   User,
   Stethoscope
@@ -20,20 +19,7 @@ import { AgentCard } from "@/components/AgentCard";
 import { ConsensusPanel } from "@/components/ConsensusPanel";
 import type { UploadSession } from "@/types/user-upload";
 import { getCancerSiteById, DOCUMENT_TYPE_LABELS } from "@/lib/upload/constants";
-
-// Agent definitions
-const AGENTS = [
-  { id: "principal-investigator", name: "Dr. Adhyaksha", specialty: "Chairperson", color: "moderator", icon: "🌟" },
-  { id: "surgical-oncologist", name: "Dr. Shalya", specialty: "Surgical Oncology", color: "surgical", icon: "🔪" },
-  { id: "medical-oncologist", name: "Dr. Chikitsa", specialty: "Medical Oncology", color: "medical", icon: "💊" },
-  { id: "radiation-oncologist", name: "Dr. Kirann", specialty: "Radiation Oncology", color: "radiation", icon: "☢️" },
-  { id: "radiologist", name: "Dr. Chitran", specialty: "Onco-Radiology", color: "radiology", icon: "📷" },
-  { id: "pathologist", name: "Dr. Marga", specialty: "Pathology", color: "pathology", icon: "🔬" },
-  { id: "scientific-critic", name: "Dr. Tark", specialty: "Scientific Safety", color: "critic", icon: "🛡️" },
-  { id: "stewardship", name: "Dr. Samata", specialty: "Patient Advocate", color: "stewardship", icon: "⚖️" },
-  { id: "palliative-care", name: "Dr. Shanti", specialty: "Palliative Care", color: "palliative", icon: "🕊️" },
-  { id: "geneticist", name: "Dr. Anuvamsha", specialty: "Genetics", color: "genetics", icon: "🧬" },
-];
+import { ALL_DELIBERATION_AGENTS as AGENTS } from "@/lib/agent-config";
 
 type Phase = 
   | "idle" 
@@ -363,10 +349,12 @@ export default function DeliberatePage() {
                 Elapsed: <span className="text-white font-mono">{formatTime(elapsedTime)}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" role="group" aria-label="Agent status indicators">
               {AGENTS.map((agent) => (
                 <div
                   key={agent.id}
+                  role="button"
+                  aria-label={`${agent.name}: ${agentStatuses[agent.id] || "pending"}`}
                   className={`w-3 h-3 rounded-full transition-colors cursor-pointer hover:scale-125 ${
                     agentStatuses[agent.id] === "complete"
                       ? "bg-emerald-500"

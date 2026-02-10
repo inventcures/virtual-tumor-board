@@ -11,16 +11,7 @@ import {
   Zap
 } from "lucide-react";
 
-// Agent definitions with colors
-const AGENTS = [
-  { id: "surgical-oncologist", name: "Dr. Shalya", specialty: "Surgical Oncology", color: "surgical", icon: "🔪" },
-  { id: "medical-oncologist", name: "Dr. Chikitsa", specialty: "Medical Oncology", color: "medical", icon: "💊" },
-  { id: "radiation-oncologist", name: "Dr. Kirann", specialty: "Radiation Oncology", color: "radiation", icon: "☢️" },
-  { id: "palliative-care", name: "Dr. Shanti", specialty: "Palliative Care", color: "palliative", icon: "🕊️" },
-  { id: "radiologist", name: "Dr. Chitran", specialty: "Onco-Radiology", color: "radiology", icon: "📷" },
-  { id: "pathologist", name: "Dr. Marga", specialty: "Pathology", color: "pathology", icon: "🔬" },
-  { id: "geneticist", name: "Dr. Anuvamsha", specialty: "Genetics", color: "genetics", icon: "🧬" },
-];
+import { ROUND1_AGENTS as AGENTS } from "@/lib/agent-config";
 
 type Phase = "idle" | "initializing" | "round1" | "round2" | "consensus" | "completed" | "error";
 type AgentStatus = "pending" | "active" | "streaming" | "complete";
@@ -47,7 +38,9 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
   const [isStreaming, setIsStreaming] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
+
   // Use ref to track streaming responses to avoid closure issues
   const streamingResponsesRef = useRef<Record<string, string>>({});
   const agentCitationsRef = useRef<Record<string, string[]>>({});
@@ -97,6 +90,7 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
     streamingResponsesRef.current = {};
     agentCitationsRef.current = {};
     agentToolsRef.current = {};
+    retryCountRef.current = 0;
 
     const initialStatuses: Record<string, AgentStatus> = {};
     AGENTS.forEach((a) => (initialStatuses[a.id] = "pending"));
@@ -116,10 +110,17 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
         }
       };
 
-      eventSource.onerror = (e) => {
-        console.error("EventSource error:", e);
+      eventSource.onerror = () => {
         eventSource.close();
-        setIsStreaming(false);
+        if (retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current += 1;
+          const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 8000);
+          setTimeout(() => startDeliberation(), delay);
+        } else {
+          setError("Connection lost after multiple retries");
+          setPhase("error");
+          setIsStreaming(false);
+        }
       };
     } catch (err) {
       setError("Failed to start deliberation");
@@ -248,10 +249,12 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
               Elapsed: <span className="text-white font-mono">{formatTime(elapsedTime)}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" role="group" aria-label="Agent status indicators">
             {AGENTS.map((agent) => (
               <div
                 key={agent.id}
+                role="button"
+                aria-label={`${agent.name}: ${agentStatuses[agent.id] || "pending"}`}
                 className={`w-3 h-3 rounded-full transition-colors cursor-pointer hover:scale-125 ${
                   agentStatuses[agent.id] === "complete"
                     ? "bg-emerald-500"

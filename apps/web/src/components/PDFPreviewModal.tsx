@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  X, 
-  Download, 
-  Share2, 
+import {
+  X,
+  Download,
+  Share2,
   FileText,
   Loader2,
   CheckCircle,
   ExternalLink,
-  MessageCircle
 } from "lucide-react";
 
 interface PDFPreviewModalProps {

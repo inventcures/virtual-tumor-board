@@ -1,16 +1,23 @@
 import { NextRequest } from 'next/server';
 import { getRoomState, subscribeToRoom, unsubscribeFromRoom } from '@/lib/collaboration/room-manager';
+import { verifyApiAuth } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   const { searchParams } = new URL(request.url);
   const caseId = searchParams.get('caseId');
   const userId = searchParams.get('userId');
 
   if (!caseId || !userId) {
-    return new Response('Missing caseId or userId', { status: 400 });
+    return new Response(
+      JSON.stringify({ error: "Missing caseId or userId" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
   }
 
   const encoder = new TextEncoder();

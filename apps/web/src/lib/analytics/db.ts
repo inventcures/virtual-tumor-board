@@ -127,6 +127,9 @@ async function initDatabase(dbUrl: string): Promise<void> {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_pageviews_visitor ON analytics_pageviews(visitor_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON analytics_events(timestamp DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_events_feature ON analytics_events(feature)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_pageviews_path ON analytics_pageviews(path)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_events_visitor ON analytics_events(visitor_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_visitors_country ON analytics_visitors(country)`);
     
     // Create daily aggregates table for faster historical queries
     await pool.query(`
@@ -248,75 +251,70 @@ export const persistentStore = {
   async updateDailyStats(date: string): Promise<void> {
     const database = await getDB();
     if (!database) return;
-    
+
     try {
-      // Get stats for the day
       const startOfDay = `${date}T00:00:00Z`;
       const endOfDay = `${date}T23:59:59Z`;
-      
-      const { rows: pvStats } = await database.query(`
-        SELECT 
-          COUNT(*) as page_views,
-          COUNT(DISTINCT visitor_id) as unique_visitors,
-          COUNT(DISTINCT session_id) as sessions
-        FROM analytics_pageviews
-        WHERE timestamp >= $1 AND timestamp <= $2
-      `, [startOfDay, endOfDay]);
-      
-      const { rows: newVisitors } = await database.query(`
-        SELECT COUNT(*) as count
-        FROM analytics_visitors
-        WHERE DATE(first_seen) = $1
-      `, [date]);
-      
-      const { rows: countries } = await database.query(`
-        SELECT country, COUNT(*) as count
-        FROM analytics_pageviews
-        WHERE timestamp >= $1 AND timestamp <= $2 AND country IS NOT NULL
-        GROUP BY country
-        ORDER BY count DESC
-        LIMIT 20
-      `, [startOfDay, endOfDay]);
-      
-      const { rows: cities } = await database.query(`
-        SELECT city, country, COUNT(*) as count
-        FROM analytics_pageviews
-        WHERE timestamp >= $1 AND timestamp <= $2 AND city IS NOT NULL
-        GROUP BY city, country
-        ORDER BY count DESC
-        LIMIT 20
-      `, [startOfDay, endOfDay]);
-      
-      const { rows: pages } = await database.query(`
-        SELECT path, COUNT(*) as views, COUNT(DISTINCT visitor_id) as unique_views
-        FROM analytics_pageviews
-        WHERE timestamp >= $1 AND timestamp <= $2
-        GROUP BY path
-        ORDER BY views DESC
-        LIMIT 20
-      `, [startOfDay, endOfDay]);
-      
-      const { rows: features } = await database.query(`
-        SELECT feature, COUNT(*) as count, 
-               SUM(CASE WHEN success THEN 1 ELSE 0 END)::float / COUNT(*)::float * 100 as success_rate
-        FROM analytics_events
-        WHERE timestamp >= $1 AND timestamp <= $2
-        GROUP BY feature
-      `, [startOfDay, endOfDay]);
-      
-      // Calculate bounce rate (sessions with single page view)
-      const { rows: bounceStats } = await database.query(`
-        SELECT COUNT(*) as bounce_count
-        FROM (
-          SELECT session_id, COUNT(*) as pv_count
+
+      const { rows } = await database.query(`
+        WITH pv_base AS (
+          SELECT visitor_id, session_id, path, country, city
           FROM analytics_pageviews
           WHERE timestamp >= $1 AND timestamp <= $2
-          GROUP BY session_id
-          HAVING COUNT(*) = 1
-        ) as single_page_sessions
-      `, [startOfDay, endOfDay]);
-      
-      // Upsert daily stats
+        ),
+        pv_stats AS (
+          SELECT
+            COUNT(*) as page_views,
+            COUNT(DISTINCT visitor_id) as unique_visitors,
+            COUNT(DISTINCT session_id) as sessions
+          FROM pv_base
+        ),
+        new_visitors AS (
+          SELECT COUNT(*) as count FROM analytics_visitors WHERE DATE(first_seen) = $3
+        ),
+        countries_agg AS (
+          SELECT COALESCE(json_agg(r), '[]'::json) as data FROM (
+            SELECT country, COUNT(*) as count FROM pv_base
+            WHERE country IS NOT NULL GROUP BY country ORDER BY count DESC LIMIT 20
+          ) r
+        ),
+        cities_agg AS (
+          SELECT COALESCE(json_agg(r), '[]'::json) as data FROM (
+            SELECT city, country, COUNT(*) as count FROM pv_base
+            WHERE city IS NOT NULL GROUP BY city, country ORDER BY count DESC LIMIT 20
+          ) r
+        ),
+        pages_agg AS (
+          SELECT COALESCE(json_agg(r), '[]'::json) as data FROM (
+            SELECT path, COUNT(*) as views, COUNT(DISTINCT visitor_id) as unique_views
+            FROM pv_base GROUP BY path ORDER BY views DESC LIMIT 20
+          ) r
+        ),
+        features_agg AS (
+          SELECT COALESCE(json_agg(r), '[]'::json) as data FROM (
+            SELECT feature, COUNT(*) as count,
+              SUM(CASE WHEN success THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0)::float * 100 as success_rate
+            FROM analytics_events WHERE timestamp >= $1 AND timestamp <= $2 GROUP BY feature
+          ) r
+        ),
+        bounce_stats AS (
+          SELECT COUNT(*) as bounce_count FROM (
+            SELECT session_id FROM pv_base GROUP BY session_id HAVING COUNT(*) = 1
+          ) sub
+        )
+        SELECT
+          pv_stats.page_views, pv_stats.unique_visitors, pv_stats.sessions,
+          new_visitors.count as new_visitors,
+          bounce_stats.bounce_count,
+          countries_agg.data as countries,
+          cities_agg.data as cities,
+          pages_agg.data as pages,
+          features_agg.data as features
+        FROM pv_stats, new_visitors, countries_agg, cities_agg, pages_agg, features_agg, bounce_stats
+      `, [startOfDay, endOfDay, date]);
+
+      const stats = rows[0];
+
       await database.query(`
         INSERT INTO analytics_daily_stats (
           date, page_views, unique_visitors, new_visitors, sessions, bounce_count,
@@ -334,17 +332,17 @@ export const persistentStore = {
           features = EXCLUDED.features
       `, [
         date,
-        pvStats[0]?.page_views || 0,
-        pvStats[0]?.unique_visitors || 0,
-        newVisitors[0]?.count || 0,
-        pvStats[0]?.sessions || 0,
-        bounceStats[0]?.bounce_count || 0,
-        JSON.stringify(countries),
-        JSON.stringify(cities),
-        JSON.stringify(pages),
-        JSON.stringify(features)
+        stats?.page_views || 0,
+        stats?.unique_visitors || 0,
+        stats?.new_visitors || 0,
+        stats?.sessions || 0,
+        stats?.bounce_count || 0,
+        JSON.stringify(stats?.countries || []),
+        JSON.stringify(stats?.cities || []),
+        JSON.stringify(stats?.pages || []),
+        JSON.stringify(stats?.features || [])
       ]);
-      
+
     } catch (e) {
       console.error('[Analytics DB] Failed to update daily stats:', e);
     }
@@ -365,7 +363,7 @@ export const persistentStore = {
     
     try {
       const { rows } = await database.query(`
-        SELECT 
+        SELECT
           date,
           page_views,
           unique_visitors,
@@ -373,9 +371,9 @@ export const persistentStore = {
           sessions,
           bounce_count
         FROM analytics_daily_stats
-        WHERE date >= CURRENT_DATE - INTERVAL '${days} days'
+        WHERE date >= CURRENT_DATE - ($1 || ' days')::INTERVAL
         ORDER BY date DESC
-      `);
+      `, [days]);
       
       return rows.map(row => ({
         date: String(row.date).substring(0, 10),

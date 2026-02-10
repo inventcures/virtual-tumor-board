@@ -3,14 +3,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { ChevronDown, ChevronUp, Loader2, CheckCircle2, Clock, BookOpen } from "lucide-react";
-
-interface Agent {
-  id: string;
-  name: string;
-  specialty: string;
-  color: string;
-  icon: string;
-}
+import { AGENT_COLOR_CLASSES, type AgentUIConfig } from "@/lib/agent-config";
 
 interface AgentResponse {
   response: string;
@@ -18,33 +11,19 @@ interface AgentResponse {
   toolsUsed: string[];
 }
 
-const colorClasses: Record<string, { bg: string; border: string; text: string; light: string }> = {
-  surgical: { bg: "bg-red-500", border: "border-red-500/30", text: "text-red-400", light: "bg-red-500/10" },
-  medical: { bg: "bg-blue-500", border: "border-blue-500/30", text: "text-blue-400", light: "bg-blue-500/10" },
-  radiation: { bg: "bg-amber-500", border: "border-amber-500/30", text: "text-amber-400", light: "bg-amber-500/10" },
-  palliative: { bg: "bg-purple-500", border: "border-purple-500/30", text: "text-purple-400", light: "bg-purple-500/10" },
-  radiology: { bg: "bg-cyan-500", border: "border-cyan-500/30", text: "text-cyan-400", light: "bg-cyan-500/10" },
-  pathology: { bg: "bg-pink-500", border: "border-pink-500/30", text: "text-pink-400", light: "bg-pink-500/10" },
-  genetics: { bg: "bg-emerald-500", border: "border-emerald-500/30", text: "text-emerald-400", light: "bg-emerald-500/10" },
-  // V7 New Roles
-  critic: { bg: "bg-rose-600", border: "border-rose-500/50", text: "text-rose-400", light: "bg-rose-500/10" },
-  stewardship: { bg: "bg-teal-600", border: "border-teal-500/50", text: "text-teal-400", light: "bg-teal-500/10" },
-  moderator: { bg: "bg-slate-600", border: "border-slate-500/50", text: "text-indigo-400", light: "bg-slate-800" },
-};
-
 export function AgentCard({
   agent,
   status,
   response,
   isStreaming = false,
 }: {
-  agent: Agent;
+  agent: AgentUIConfig;
   status: "pending" | "active" | "streaming" | "complete";
   response?: AgentResponse;
   isStreaming?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const colors = colorClasses[agent.color] || colorClasses.medical;
+  const colors = AGENT_COLOR_CLASSES[agent.color] || AGENT_COLOR_CLASSES.medical;
 
   return (
     <div

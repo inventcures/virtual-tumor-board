@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { verifyApiAuth } from "@/lib/api-auth";
 import type { 
   DocumentType, 
   ExtractedClinicalData,
@@ -112,6 +113,9 @@ function findBestCancerSiteMatch(detectedSite: string): { id: string; label: str
 }
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const { documents } = body as { documents: DocumentInput[] };

@@ -9,6 +9,7 @@
 
 import { NextRequest } from "next/server";
 import { callAI, getAvailableProviders } from "@/lib/ai-service";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import type { 
   UploadSession, 
   DocumentType, 
@@ -302,17 +303,52 @@ Include: "This AI-generated opinion is for informational purposes only and does 
 }
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous";
+  const { allowed, retryAfterMs } = rateLimit(ip, { maxRequests: 5, windowMs: 300_000 });
+  if (!allowed) return rateLimitResponse(retryAfterMs);
+
   const encoder = new TextEncoder();
-  
+
   try {
     const body = await request.json();
     const { session } = body as { session: UploadSessionV6 };
-    
+
     if (!session || !session.documents?.length) {
       return new Response(
         JSON.stringify({ error: "No session or documents provided" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
+    }
+
+    const VALID_USER_TYPES = ["patient", "oncologist", "doctor"];
+    if (!session.userType || !VALID_USER_TYPES.includes(session.userType)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid userType" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!session.cancerSite || typeof session.cancerSite !== "string" || session.cancerSite.length > 100) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or missing cancerSite" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (session.documents.length > 50) {
+      return new Response(
+        JSON.stringify({ error: "Too many documents (max 50)" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    for (const doc of session.documents) {
+      if (!doc.classifiedType || typeof doc.classifiedType !== "string") {
+        return new Response(
+          JSON.stringify({ error: "Each document must have a valid classifiedType" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Check AI availability

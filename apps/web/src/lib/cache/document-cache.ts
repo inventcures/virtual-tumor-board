@@ -102,18 +102,15 @@ export async function generateCacheKey(
   base64Data: string,
   mimeType: string
 ): Promise<string> {
-  // Create a combined string to hash
-  const combined = `${mimeType}:${base64Data.slice(0, 1000)}:${base64Data.length}`;
-  
-  // Use SubtleCrypto for SHA-256 (available in Edge Runtime)
+  const combined = `${mimeType}:${base64Data}`;
+
   const encoder = new TextEncoder();
   const data = encoder.encode(combined);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  
-  // Convert to hex string
+
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  
+
   return `doc:${hashHex.slice(0, 32)}`;
 }
 

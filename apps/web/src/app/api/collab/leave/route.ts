@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { removeUserFromRoom, getRoomState, broadcastToRoom } from '@/lib/collaboration/room-manager';
+import { verifyApiAuth } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+  const authError = verifyApiAuth(request);
+  if (authError) return authError;
+
   try {
     const { caseId, userId } = await request.json() as { caseId: string; userId: string };
     

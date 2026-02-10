@@ -1,43 +1,24 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, memo } from "react";
 import ReactMarkdown from "react-markdown";
-import { 
-  Award, 
-  ChevronDown, 
-  ChevronUp, 
-  FileText, 
+import {
+  Award,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
-  AlertTriangle,
-  Target,
-  Calendar,
   DollarSign,
-  Users,
   BookOpen,
   Download,
-  Loader2
 } from "lucide-react";
 import { PDFPreviewModalV2 } from "./PDFPreviewModalV2";
+import { getAgentMeta, getAgentColors } from "@/lib/agent-config";
 
 interface AgentResponse {
   response: string;
   citations: string[];
   toolsUsed: string[];
 }
-
-// Agent metadata
-const agentMeta: Record<string, { name: string; specialty: string; color: string; icon: string }> = {
-  "principal-investigator": { name: "Dr. Adhyaksha", specialty: "Chairperson", color: "indigo", icon: "🌟" },
-  "surgical-oncologist": { name: "Dr. Shalya", specialty: "Surgical Oncology", color: "red", icon: "🔪" },
-  "medical-oncologist": { name: "Dr. Chikitsa", specialty: "Medical Oncology", color: "blue", icon: "💊" },
-  "radiation-oncologist": { name: "Dr. Kirann", specialty: "Radiation Oncology", color: "amber", icon: "☢️" },
-  "palliative-care": { name: "Dr. Shanti", specialty: "Palliative Care", color: "purple", icon: "🕊️" },
-  "radiologist": { name: "Dr. Chitran", specialty: "Onco-Radiology", color: "cyan", icon: "📷" },
-  "pathologist": { name: "Dr. Marga", specialty: "Pathology", color: "pink", icon: "🔬" },
-  "geneticist": { name: "Dr. Anuvamsha", specialty: "Genetics", color: "emerald", icon: "🧬" },
-  "scientific-critic": { name: "Dr. Tark", specialty: "Scientific Safety", color: "rose", icon: "🛡️" },
-  "stewardship": { name: "Dr. Samata", specialty: "Patient Advocate", color: "teal", icon: "⚖️" },
-};
 
 export function ConsensusPanel({
   consensus,
@@ -275,21 +256,7 @@ export function ConsensusPanel({
   );
 }
 
-const colorStyles: Record<string, string> = {
-  red: "bg-red-500/20 text-red-400 border-red-500/30",
-  blue: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  amber: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  purple: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  cyan: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-  pink: "bg-pink-500/20 text-pink-400 border-pink-500/30",
-  emerald: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  slate: "bg-slate-500/20 text-slate-400 border-slate-500/30",
-  rose: "bg-rose-500/20 text-rose-400 border-rose-500/30",
-  teal: "bg-teal-500/20 text-teal-400 border-teal-500/30",
-  indigo: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
-};
-
-function CollapsibleAgentCard({
+const CollapsibleAgentCard = memo(function CollapsibleAgentCard({
   agentId,
   response,
   isExpanded,
@@ -300,8 +267,8 @@ function CollapsibleAgentCard({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const meta = agentMeta[agentId] || { name: agentId, specialty: "Specialist", color: "slate", icon: "👤" };
-  const styles = colorStyles[meta.color] || colorStyles.slate;
+  const meta = getAgentMeta(agentId);
+  const colors = getAgentColors(meta.color);
 
   return (
     <div 
@@ -311,15 +278,15 @@ function CollapsibleAgentCard({
       {/* Clickable Header */}
       <button
         onClick={onToggle}
-        className={`w-full px-4 py-3 border-b border-slate-700 flex items-center justify-between hover:bg-slate-800/50 transition-colors ${styles.split(' ')[0]}`}
+        className={`w-full px-4 py-3 border-b border-slate-700 flex items-center justify-between hover:bg-slate-800/50 transition-colors ${colors.light}`}
       >
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${styles}`}>
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${colors.light} ${colors.text} ${colors.border}`}>
             {meta.icon}
           </div>
           <div className="text-left">
             <h4 className="font-semibold text-white">{meta.name}</h4>
-            <p className={`text-sm ${styles.split(' ')[1]}`}>{meta.specialty}</p>
+            <p className={`text-sm ${colors.text}`}>{meta.specialty}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -393,4 +360,4 @@ function CollapsibleAgentCard({
       )}
     </div>
   );
-}
+});

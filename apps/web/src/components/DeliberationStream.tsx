@@ -14,11 +14,11 @@
  * - One message per visual element
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { 
-  Activity, 
-  CheckCircle2, 
-  Clock, 
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  Activity,
+  CheckCircle2,
+  Clock,
   AlertCircle,
   BookOpen,
   ChevronDown,
@@ -27,6 +27,7 @@ import {
   Play,
   SkipForward
 } from "lucide-react";
+import { getAgentMeta } from "@/lib/agent-config";
 
 // ============================================================================
 // TYPES
@@ -220,6 +221,8 @@ export function DeliberationStream({
   const eventSourceRef = useRef<EventSource | null>(null);
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
 
   // Timer for elapsed time
   useEffect(() => {
@@ -247,6 +250,7 @@ export function DeliberationStream({
     setCurrentPhase(0);
     setElapsedTime(0);
     startTimeRef.current = Date.now();
+    retryCountRef.current = 0;
 
     const eventSource = new EventSource(
       `/api/deliberate/stream?caseId=${encodeURIComponent(caseId)}&v18=true`
@@ -264,7 +268,13 @@ export function DeliberationStream({
 
     eventSource.onerror = () => {
       eventSource.close();
-      setIsStreaming(false);
+      if (retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current += 1;
+        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 8000);
+        setTimeout(() => startDeliberation(), delay);
+      } else {
+        setIsStreaming(false);
+      }
     };
   }, [caseId]);
 
@@ -332,46 +342,18 @@ export function DeliberationStream({
     }
   };
 
-  // Helper functions
-  const getAgentName = (id: AgentId): string => {
-    const names: Record<AgentId, string> = {
-      "surgical-oncologist": "Dr. Shalya",
-      "medical-oncologist": "Dr. Chikitsa",
-      "radiation-oncologist": "Dr. Kirann",
-      "palliative-care": "Dr. Shanti",
-      "radiologist": "Dr. Chitran",
-      "pathologist": "Dr. Marga",
-      "geneticist": "Dr. Anuvamsha",
-      "principal-investigator": "Dr. Adhyaksha",
-      "scientific-critic": "Dr. Tark",
-      "stewardship": "Dr. Samata",
-    };
-    return names[id] || id;
-  };
+  const getAgentName = (id: AgentId): string => getAgentMeta(id).name;
+  const getAgentSpecialty = (id: AgentId): string => getAgentMeta(id).specialty;
 
-  const getAgentSpecialty = (id: AgentId): string => {
-    const specialties: Record<AgentId, string> = {
-      "surgical-oncologist": "Surgery",
-      "medical-oncologist": "Medical Oncology",
-      "radiation-oncologist": "Radiation Oncology",
-      "palliative-care": "Palliative Care",
-      "radiologist": "Radiology",
-      "pathologist": "Pathology",
-      "geneticist": "Genetics",
-      "principal-investigator": "Moderator",
-      "scientific-critic": "Scientific Review",
-      "stewardship": "Resource Stewardship",
-    };
-    return specialties[id] || id;
-  };
-
-  // Group thoughts by phase
-  const thoughtsByPhase = thoughts.reduce((acc, thought) => {
-    const phase = thought.phase || 1;
-    if (!acc[phase]) acc[phase] = [];
-    acc[phase].push(thought);
-    return acc;
-  }, {} as Record<number, AgentThought[]>);
+  const thoughtsByPhase = useMemo(() =>
+    thoughts.reduce((acc, thought) => {
+      const phase = thought.phase || 1;
+      if (!acc[phase]) acc[phase] = [];
+      acc[phase].push(thought);
+      return acc;
+    }, {} as Record<number, AgentThought[]>),
+    [thoughts]
+  );
 
   const togglePhase = (phase: number) => {
     setExpandedPhases(prev => {
@@ -588,7 +570,7 @@ function ThoughtBubble({ thought }: ThoughtBubbleProps) {
         </span>
         {thought.isResponse && thought.respondsTo && (
           <span className="text-xs text-slate-600">
-            → responding to {getAgentName(thought.respondsTo as AgentId)}
+            → responding to {getAgentNameFromId(thought.respondsTo as AgentId)}
           </span>
         )}
       </div>
@@ -609,21 +591,8 @@ function ThoughtBubble({ thought }: ThoughtBubbleProps) {
   );
 }
 
-// Helper function (duplicated for component scope)
-function getAgentName(id: AgentId): string {
-  const names: Record<AgentId, string> = {
-    "surgical-oncologist": "Dr. Shalya",
-    "medical-oncologist": "Dr. Chikitsa",
-    "radiation-oncologist": "Dr. Kirann",
-    "palliative-care": "Dr. Shanti",
-    "radiologist": "Dr. Chitran",
-    "pathologist": "Dr. Marga",
-    "geneticist": "Dr. Anuvamsha",
-    "principal-investigator": "Dr. Adhyaksha",
-    "scientific-critic": "Dr. Tark",
-    "stewardship": "Dr. Samata",
-  };
-  return names[id] || id;
+function getAgentNameFromId(id: AgentId): string {
+  return getAgentMeta(id).name;
 }
 
 // ============================================================================

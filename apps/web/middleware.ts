@@ -41,29 +41,11 @@ export async function middleware(request: NextRequest) {
   
   // Site-wide auth check (if SITE_ACCESS_TOKEN is set)
   const siteAccessToken = process.env.SITE_ACCESS_TOKEN;
-  console.log('[MIDDLEWARE] SITE_ACCESS_TOKEN set:', !!siteAccessToken, 'Path:', pathname);
-  
+
   if (siteAccessToken) {
     const authCookie = request.cookies.get('vtb_auth_v2')?.value;
-    console.log('[MIDDLEWARE] Auth cookie present:', !!authCookie, 'Cookie matches token:', authCookie === siteAccessToken);
-    
+
     if (authCookie !== siteAccessToken) {
-      // Check query param for token (for initial access)
-      const queryToken = request.nextUrl.searchParams.get('token');
-      console.log('[MIDDLEWARE] Query token present:', !!queryToken, 'Query token matches:', queryToken === siteAccessToken);
-      if (queryToken === siteAccessToken) {
-        // Set cookie and redirect without token in URL
-        const response = NextResponse.redirect(new URL(pathname, request.url));
-        response.cookies.set('vtb_auth_v2', siteAccessToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: 60 * 60 * 24 * 30, // 30 days
-        });
-        return response;
-      }
-      
-      // Unauthorized - return simple auth page
       return new NextResponse(`
         <!DOCTYPE html>
         <html>
@@ -86,7 +68,7 @@ export async function middleware(request: NextRequest) {
           </div>
         </body>
         </html>
-      `, { 
+      `, {
         status: 401,
         headers: { 'Content-Type': 'text/html' }
       });
@@ -97,25 +79,9 @@ export async function middleware(request: NextRequest) {
   if (ADMIN_PATHS.some(path => pathname.startsWith(path))) {
     const adminToken = request.cookies.get('vtb_admin_token')?.value;
     const envToken = process.env.ADMIN_TOKEN;
-    
-    // If ADMIN_TOKEN is set, require auth
+
     if (envToken && adminToken !== envToken) {
-      // Check query param for token (for initial access)
-      const queryToken = request.nextUrl.searchParams.get('token');
-      if (queryToken === envToken) {
-        // Set cookie and redirect without token in URL
-        const response = NextResponse.redirect(new URL(pathname, request.url));
-        response.cookies.set('vtb_admin_token', envToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-        });
-        return response;
-      }
-      
-      // Unauthorized
-      return new NextResponse('Unauthorized. Add ?token=YOUR_ADMIN_TOKEN to access.', { 
+      return new NextResponse('Unauthorized', {
         status: 401,
         headers: { 'Content-Type': 'text/plain' }
       });

@@ -21,6 +21,27 @@ const roomSubscribers = new Map<string, Set<{ userId: string; callback: MessageC
 // Cleanup stale cursors after 5 seconds
 const CURSOR_TIMEOUT = 5000;
 
+// Cleanup empty rooms after 30 minutes of inactivity
+const ROOM_TTL_MS = 30 * 60 * 1000;
+const roomLastActivity = new Map<string, number>();
+
+function cleanupStaleRooms(): void {
+  const now = Date.now();
+  for (const [caseId, lastActivity] of roomLastActivity) {
+    if (now - lastActivity > ROOM_TTL_MS) {
+      const subscribers = roomSubscribers.get(caseId);
+      if (!subscribers || subscribers.size === 0) {
+        rooms.delete(caseId);
+        roomSubscribers.delete(caseId);
+        roomLastActivity.delete(caseId);
+      }
+    }
+  }
+}
+
+// Run cleanup every 5 minutes
+setInterval(cleanupStaleRooms, 5 * 60 * 1000);
+
 export function getOrCreateRoom(caseId: string): CollaborationRoom {
   let room = rooms.get(caseId);
   if (!room) {
@@ -40,6 +61,7 @@ export function getOrCreateRoom(caseId: string): CollaborationRoom {
 
 export function addUserToRoom(caseId: string, user: CollaborationUser): CollaborationRoom {
   const room = getOrCreateRoom(caseId);
+  roomLastActivity.set(caseId, Date.now());
   room.users.set(user.id, user);
   
   // First user becomes leader
@@ -75,7 +97,8 @@ export function removeUserFromRoom(caseId: string, userId: string): Collaboratio
 export function updateCursor(caseId: string, cursor: CursorPosition): void {
   const room = rooms.get(caseId);
   if (!room) return;
-  
+
+  roomLastActivity.set(caseId, Date.now());
   cursor.timestamp = Date.now();
   room.cursors.set(cursor.userId, cursor);
 }

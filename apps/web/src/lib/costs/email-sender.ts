@@ -18,8 +18,8 @@ import { formatCost } from './gemini-pricing';
 // Configuration
 // ============================================================================
 
-const RECIPIENT_EMAIL = 'spiff007@gmail.com';
-const SENDER_EMAIL = 'costs@vtb.inventcures.com';  // Configure in Resend
+const RECIPIENT_EMAIL = process.env.COST_REPORT_EMAIL || 'spiff007@gmail.com';
+const SENDER_EMAIL = process.env.COST_REPORT_FROM || 'costs@vtb.inventcures.com';
 const SENDER_NAME = 'VTB Cost Tracker';
 
 export type ReportType = 'DAILY' | 'WEEKLY' | 'MONTHLY';
@@ -214,10 +214,11 @@ export async function sendCostReportEmail(
  * Check if it's time to send a scheduled report
  * Uses IST (UTC+5:30) timezone
  */
+const REPORT_TIMEZONE_OFFSET_HOURS = parseFloat(process.env.COST_REPORT_TZ_OFFSET || '5.5');
+
 export function shouldSendReport(now: Date = new Date()): ReportType | null {
-  // Convert to IST
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(now.getTime() + istOffset);
+  const tzOffsetMs = REPORT_TIMEZONE_OFFSET_HOURS * 60 * 60 * 1000;
+  const istTime = new Date(now.getTime() + tzOffsetMs);
   
   const hour = istTime.getUTCHours();
   const minute = istTime.getUTCMinutes();
@@ -248,10 +249,9 @@ export function shouldSendReport(now: Date = new Date()): ReportType | null {
  */
 export function getNextReportTime(): { type: ReportType; time: Date } {
   const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  
-  // Find next 22:00 IST
-  const istNow = new Date(now.getTime() + istOffset);
+  const tzOffsetMs = REPORT_TIMEZONE_OFFSET_HOURS * 60 * 60 * 1000;
+
+  const istNow = new Date(now.getTime() + tzOffsetMs);
   let nextIST = new Date(istNow);
   nextIST.setUTCHours(22, 0, 0, 0);
   
@@ -259,8 +259,7 @@ export function getNextReportTime(): { type: ReportType; time: Date } {
     nextIST.setUTCDate(nextIST.getUTCDate() + 1);
   }
   
-  // Convert back to UTC
-  const nextUTC = new Date(nextIST.getTime() - istOffset);
+  const nextUTC = new Date(nextIST.getTime() - tzOffsetMs);
   
   // Determine type
   const dayOfWeek = nextIST.getUTCDay();
