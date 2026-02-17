@@ -46,7 +46,23 @@ export async function middleware(request: NextRequest) {
 
   if (siteAccessToken) {
     const authCookie = request.cookies.get('vtb_auth_v2')?.value;
+    const tokenParam = request.nextUrl.searchParams.get('token');
 
+    // Check if token is in URL query param
+    if (tokenParam === siteAccessToken) {
+      // Valid token in URL - set cookie and redirect to clean URL
+      const response = NextResponse.redirect(new URL(pathname, request.url));
+      response.cookies.set('vtb_auth_v2', siteAccessToken, {
+        httpOnly: false, // Allow client-side access
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
+      return response;
+    }
+
+    // Check cookie
     if (authCookie !== siteAccessToken) {
       return new NextResponse(`
         <!DOCTYPE html>
@@ -67,6 +83,7 @@ export async function middleware(request: NextRequest) {
           <div class="container">
             <h1>Access Restricted</h1>
             <p>This site is currently private. Please contact the owner for access.</p>
+            <p style="font-size: 0.875rem; color: #64748b; margin-top: 2rem;">Add ?token=YOUR_TOKEN to the URL</p>
           </div>
         </body>
         </html>
