@@ -43,27 +43,15 @@ export async function middleware(request: NextRequest) {
   
   // Site-wide auth check (if SITE_ACCESS_TOKEN is set)
   const siteAccessToken = process.env.SITE_ACCESS_TOKEN;
+  const tokenParam = request.nextUrl.searchParams.get('token');
 
   if (siteAccessToken) {
     const authCookie = request.cookies.get('vtb_auth_v2')?.value;
-    const tokenParam = request.nextUrl.searchParams.get('token');
 
-    // Check if token is in URL query param
-    if (tokenParam === siteAccessToken) {
-      // Valid token in URL - set cookie and redirect to clean URL
-      const response = NextResponse.redirect(new URL(pathname, request.url));
-      response.cookies.set('vtb_auth_v2', siteAccessToken, {
-        httpOnly: false, // Allow client-side access
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 30, // 30 days
-        path: '/',
-      });
-      return response;
-    }
+    // Check if valid token is in URL query param OR cookie
+    const isAuthenticated = tokenParam === siteAccessToken || authCookie === siteAccessToken;
 
-    // Check cookie
-    if (authCookie !== siteAccessToken) {
+    if (!isAuthenticated) {
       return new NextResponse(`
         <!DOCTYPE html>
         <html>
@@ -108,7 +96,21 @@ export async function middleware(request: NextRequest) {
   }
   
   const response = NextResponse.next();
-  
+
+  // If token is in URL and no cookie exists, set cookie for future visits
+  if (siteAccessToken && tokenParam === siteAccessToken) {
+    const authCookie = request.cookies.get('vtb_auth_v2')?.value;
+    if (!authCookie) {
+      response.cookies.set('vtb_auth_v2', siteAccessToken, {
+        httpOnly: false, // Allow client-side access
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
+    }
+  }
+
   // Get or create visitor ID
   let visitorId = request.cookies.get('vtb_visitor_id')?.value;
   if (!visitorId) {
