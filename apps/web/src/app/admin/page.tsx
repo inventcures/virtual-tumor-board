@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { AnalyticsSummary, RealTimeStats } from '@/lib/analytics/types';
 import { getCountryFlag } from '@/lib/analytics/geolocation';
+import { SessionLogs } from '@/components/admin/SessionLogs';
 
 // Refresh intervals
 const REALTIME_REFRESH_MS = 10000; // 10 seconds
@@ -431,6 +432,11 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Session Logs */}
+        <div className="mt-8">
+          <SessionLogs timeRange={timeRange} />
         </div>
 
         {/* Footer */}

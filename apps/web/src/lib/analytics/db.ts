@@ -13,13 +13,14 @@
 
 import 'server-only';
 
-import { 
-  VisitorInfo, 
-  PageView, 
-  FeatureEvent, 
+import {
+  VisitorInfo,
+  SessionInfo,
+  PageView,
+  FeatureEvent,
   AnalyticsSummary,
   RealTimeStats,
-  FeatureType 
+  FeatureType
 } from './types';
 
 // ============================================================================
@@ -84,12 +85,45 @@ async function initDatabase(dbUrl: string): Promise<void> {
         timezone TEXT,
         user_agent TEXT,
         device TEXT,
+        device_vendor TEXT,
+        device_model TEXT,
         browser TEXT,
+        browser_version TEXT,
         os TEXT,
+        os_version TEXT,
+        engine TEXT,
         referrer TEXT,
         utm_source TEXT,
         utm_medium TEXT,
         utm_campaign TEXT
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS analytics_sessions (
+        id TEXT PRIMARY KEY,
+        visitor_id TEXT NOT NULL,
+        start_time TIMESTAMP NOT NULL,
+        last_activity_time TIMESTAMP NOT NULL,
+        end_time TIMESTAMP,
+        duration INTEGER,
+        page_count INTEGER DEFAULT 0,
+        ip TEXT NOT NULL,
+        city TEXT,
+        country TEXT,
+        country_code TEXT,
+        latitude REAL,
+        longitude REAL,
+        device TEXT,
+        device_vendor TEXT,
+        device_model TEXT,
+        browser TEXT,
+        browser_version TEXT,
+        os TEXT,
+        os_version TEXT,
+        landing_page TEXT NOT NULL,
+        exit_page TEXT,
+        referrer TEXT
       )
     `);
     
@@ -130,6 +164,9 @@ async function initDatabase(dbUrl: string): Promise<void> {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_pageviews_path ON analytics_pageviews(path)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_events_visitor ON analytics_events(visitor_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_visitors_country ON analytics_visitors(country)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON analytics_sessions(start_time DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_visitor ON analytics_sessions(visitor_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_country ON analytics_sessions(country)`);
     
     // Create daily aggregates table for faster historical queries
     await pool.query(`
@@ -175,14 +212,15 @@ export const persistentStore = {
   async upsertVisitor(visitor: VisitorInfo): Promise<void> {
     const database = await getDB();
     if (!database) return;
-    
+
     try {
       await database.query(`
         INSERT INTO analytics_visitors (
           id, first_seen, last_seen, visit_count, ip, city, region, country, country_code,
-          latitude, longitude, timezone, user_agent, device, browser, os, referrer,
+          latitude, longitude, timezone, user_agent, device, device_vendor, device_model,
+          browser, browser_version, os, os_version, engine, referrer,
           utm_source, utm_medium, utm_campaign
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         ON CONFLICT (id) DO UPDATE SET
           last_seen = EXCLUDED.last_seen,
           visit_count = analytics_visitors.visit_count + 1,
@@ -194,11 +232,160 @@ export const persistentStore = {
         visitor.id, visitor.firstSeen, visitor.lastSeen, visitor.visitCount,
         visitor.ip, visitor.city, visitor.region, visitor.country, visitor.countryCode,
         visitor.latitude, visitor.longitude, visitor.timezone, visitor.userAgent,
-        visitor.device, visitor.browser, visitor.os, visitor.referrer,
-        visitor.utmSource, visitor.utmMedium, visitor.utmCampaign
+        visitor.device, visitor.deviceVendor, visitor.deviceModel,
+        visitor.browser, visitor.browserVersion, visitor.os, visitor.osVersion, visitor.engine,
+        visitor.referrer, visitor.utmSource, visitor.utmMedium, visitor.utmCampaign
       ]);
     } catch (e) {
       console.error('[Analytics DB] Failed to upsert visitor:', e);
+    }
+  },
+
+  /**
+   * Get session by ID
+   */
+  async getSession(id: string): Promise<SessionInfo | null> {
+    const database = await getDB();
+    if (!database) return null;
+
+    try {
+      const { rows } = await database.query(`
+        SELECT * FROM analytics_sessions WHERE id = $1
+      `, [id]);
+
+      if (rows.length === 0) return null;
+
+      const row = rows[0];
+      return {
+        id: String(row.id),
+        visitorId: String(row.visitor_id),
+        startTime: String(row.start_time),
+        lastActivityTime: String(row.last_activity_time),
+        endTime: row.end_time ? String(row.end_time) : undefined,
+        duration: row.duration ? Number(row.duration) : undefined,
+        pageCount: Number(row.page_count) || 0,
+        ip: String(row.ip),
+        city: row.city ? String(row.city) : undefined,
+        country: row.country ? String(row.country) : undefined,
+        countryCode: row.country_code ? String(row.country_code) : undefined,
+        latitude: row.latitude ? Number(row.latitude) : undefined,
+        longitude: row.longitude ? Number(row.longitude) : undefined,
+        device: row.device as 'mobile' | 'tablet' | 'desktop' | undefined,
+        deviceVendor: row.device_vendor ? String(row.device_vendor) : undefined,
+        deviceModel: row.device_model ? String(row.device_model) : undefined,
+        browser: row.browser ? String(row.browser) : undefined,
+        browserVersion: row.browser_version ? String(row.browser_version) : undefined,
+        os: row.os ? String(row.os) : undefined,
+        osVersion: row.os_version ? String(row.os_version) : undefined,
+        landingPage: String(row.landing_page),
+        exitPage: row.exit_page ? String(row.exit_page) : undefined,
+        referrer: row.referrer ? String(row.referrer) : undefined,
+      };
+    } catch (e) {
+      console.error('[Analytics DB] Failed to get session:', e);
+      return null;
+    }
+  },
+
+  /**
+   * Save or update a session
+   */
+  async upsertSession(session: SessionInfo): Promise<void> {
+    const database = await getDB();
+    if (!database) return;
+
+    try {
+      await database.query(`
+        INSERT INTO analytics_sessions (
+          id, visitor_id, start_time, last_activity_time, end_time, duration, page_count,
+          ip, city, country, country_code, latitude, longitude,
+          device, device_vendor, device_model, browser, browser_version, os, os_version,
+          landing_page, exit_page, referrer
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        ON CONFLICT (id) DO UPDATE SET
+          last_activity_time = EXCLUDED.last_activity_time,
+          end_time = EXCLUDED.end_time,
+          duration = EXCLUDED.duration,
+          page_count = EXCLUDED.page_count,
+          exit_page = EXCLUDED.exit_page
+      `, [
+        session.id, session.visitorId, session.startTime, session.lastActivityTime,
+        session.endTime, session.duration, session.pageCount,
+        session.ip, session.city, session.country, session.countryCode,
+        session.latitude, session.longitude,
+        session.device, session.deviceVendor, session.deviceModel,
+        session.browser, session.browserVersion, session.os, session.osVersion,
+        session.landingPage, session.exitPage, session.referrer
+      ]);
+    } catch (e) {
+      console.error('[Analytics DB] Failed to upsert session:', e);
+    }
+  },
+
+  /**
+   * End a session (mark end time and calculate duration)
+   */
+  async endSession(id: string, endTime: string, exitPage: string): Promise<void> {
+    const database = await getDB();
+    if (!database) return;
+
+    try {
+      await database.query(`
+        UPDATE analytics_sessions
+        SET
+          end_time = $2,
+          exit_page = $3,
+          duration = EXTRACT(EPOCH FROM ($2::timestamp - start_time))::integer
+        WHERE id = $1
+      `, [id, endTime, exitPage]);
+    } catch (e) {
+      console.error('[Analytics DB] Failed to end session:', e);
+    }
+  },
+
+  /**
+   * Get recent sessions
+   */
+  async getSessions(since: Date, limit = 100): Promise<SessionInfo[]> {
+    const database = await getDB();
+    if (!database) return [];
+
+    try {
+      const { rows } = await database.query(`
+        SELECT * FROM analytics_sessions
+        WHERE start_time >= $1
+        ORDER BY start_time DESC
+        LIMIT $2
+      `, [since.toISOString(), limit]);
+
+      return rows.map(row => ({
+        id: String(row.id),
+        visitorId: String(row.visitor_id),
+        startTime: String(row.start_time),
+        lastActivityTime: String(row.last_activity_time),
+        endTime: row.end_time ? String(row.end_time) : undefined,
+        duration: row.duration ? Number(row.duration) : undefined,
+        pageCount: Number(row.page_count) || 0,
+        ip: String(row.ip),
+        city: row.city ? String(row.city) : undefined,
+        country: row.country ? String(row.country) : undefined,
+        countryCode: row.country_code ? String(row.country_code) : undefined,
+        latitude: row.latitude ? Number(row.latitude) : undefined,
+        longitude: row.longitude ? Number(row.longitude) : undefined,
+        device: row.device as 'mobile' | 'tablet' | 'desktop' | undefined,
+        deviceVendor: row.device_vendor ? String(row.device_vendor) : undefined,
+        deviceModel: row.device_model ? String(row.device_model) : undefined,
+        browser: row.browser ? String(row.browser) : undefined,
+        browserVersion: row.browser_version ? String(row.browser_version) : undefined,
+        os: row.os ? String(row.os) : undefined,
+        osVersion: row.os_version ? String(row.os_version) : undefined,
+        landingPage: String(row.landing_page),
+        exitPage: row.exit_page ? String(row.exit_page) : undefined,
+        referrer: row.referrer ? String(row.referrer) : undefined,
+      }));
+    } catch (e) {
+      console.error('[Analytics DB] Failed to get sessions:', e);
+      return [];
     }
   },
 

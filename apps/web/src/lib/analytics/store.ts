@@ -12,6 +12,7 @@
 
 import {
   VisitorInfo,
+  SessionInfo,
   PageView,
   FeatureEvent,
   AnalyticsSummary,
@@ -25,12 +26,14 @@ import {
 // ============================================================================
 
 const MAX_VISITORS = 10000;
+const MAX_SESSIONS = 20000;
 const MAX_PAGE_VIEWS = 50000;
 const MAX_FEATURE_EVENTS = 20000;
 const ACTIVE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 // Storage
 const visitors = new Map<string, VisitorInfo>();
+const sessions = new Map<string, SessionInfo>();
 const pageViews: PageView[] = [];
 const featureEvents: FeatureEvent[] = [];
 
@@ -55,8 +58,46 @@ export const analyticsStore: AnalyticsStore = {
         .sort((a, b) => a[1].lastSeen.localeCompare(b[1].lastSeen))[0];
       if (oldest) visitors.delete(oldest[0]);
     }
-    
+
     visitors.set(visitor.id, visitor);
+  },
+
+  async getSession(id: string): Promise<SessionInfo | null> {
+    return sessions.get(id) || null;
+  },
+
+  async upsertSession(session: SessionInfo): Promise<void> {
+    // LRU eviction if needed
+    if (sessions.size >= MAX_SESSIONS && !sessions.has(session.id)) {
+      const oldest = [...sessions.entries()]
+        .sort((a, b) => a[1].startTime.localeCompare(b[1].startTime))[0];
+      if (oldest) sessions.delete(oldest[0]);
+    }
+
+    sessions.set(session.id, session);
+    summaryCache = null;
+  },
+
+  async endSession(id: string, endTime: string, exitPage: string): Promise<void> {
+    const session = sessions.get(id);
+    if (session) {
+      const start = new Date(session.startTime).getTime();
+      const end = new Date(endTime).getTime();
+      session.endTime = endTime;
+      session.exitPage = exitPage;
+      session.duration = Math.floor((end - start) / 1000); // seconds
+      sessions.set(id, session);
+      summaryCache = null;
+    }
+  },
+
+  async getSessions(since: Date, limit = 100): Promise<SessionInfo[]> {
+    const sinceStr = since.toISOString();
+    const filtered = Array.from(sessions.values())
+      .filter(s => s.startTime >= sinceStr)
+      .sort((a, b) => b.startTime.localeCompare(a.startTime));
+
+    return limit ? filtered.slice(0, limit) : filtered;
   },
 
   async logPageView(pageView: PageView): Promise<void> {

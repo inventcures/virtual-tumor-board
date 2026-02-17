@@ -1,15 +1,17 @@
 /**
  * Next.js Middleware for Analytics Tracking
- * 
+ *
  * Tracks all page visits with:
- * - IP geolocation (city, country)
- * - Device/browser info
+ * - IP geolocation (city, country, lat/lng)
+ * - Device/browser/OS info (parsed from user agent)
  * - Referrer
- * - Session management
+ * - Session management with duration tracking
+ * - Detailed logging for admin panel
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { parseUserAgent } from './src/lib/analytics/user-agent';
 
 // Paths to skip tracking
 const SKIP_PATHS = [
@@ -114,6 +116,10 @@ export async function middleware(request: NextRequest) {
     });
   }
   
+  // Parse device/browser/OS info from user agent
+  const userAgent = request.headers.get('user-agent') || undefined;
+  const deviceInfo = parseUserAgent(userAgent);
+
   // Track page view asynchronously (don't block response)
   const trackingData = {
     visitorId,
@@ -121,22 +127,26 @@ export async function middleware(request: NextRequest) {
     path: pathname,
     timestamp: new Date().toISOString(),
     referrer: request.headers.get('referer') || undefined,
-    userAgent: request.headers.get('user-agent') || undefined,
-    // Geolocation from headers (Vercel provides these)
-    ip: request.headers.get('x-real-ip') || 
+    userAgent,
+    // Geolocation from headers (Vercel/Cloudflare provides these)
+    ip: request.headers.get('x-real-ip') ||
         request.headers.get('x-forwarded-for')?.split(',')[0] ||
         request.headers.get('cf-connecting-ip') ||
         '127.0.0.1',
-    city: request.headers.get('x-vercel-ip-city') 
-      ? decodeURIComponent(request.headers.get('x-vercel-ip-city')!) 
+    city: request.headers.get('x-vercel-ip-city')
+      ? decodeURIComponent(request.headers.get('x-vercel-ip-city')!)
       : undefined,
     country: request.headers.get('x-vercel-ip-country') || undefined,
-    latitude: request.headers.get('x-vercel-ip-latitude') 
-      ? parseFloat(request.headers.get('x-vercel-ip-latitude')!) 
+    countryCode: request.headers.get('x-vercel-ip-country-code') || undefined,
+    latitude: request.headers.get('x-vercel-ip-latitude')
+      ? parseFloat(request.headers.get('x-vercel-ip-latitude')!)
       : undefined,
     longitude: request.headers.get('x-vercel-ip-longitude')
       ? parseFloat(request.headers.get('x-vercel-ip-longitude')!)
       : undefined,
+    timezone: request.headers.get('x-vercel-ip-timezone') || undefined,
+    // Device/browser/OS info (parsed from user agent)
+    ...deviceInfo,
   };
   
   // Fire and forget - send to tracking endpoint

@@ -6,10 +6,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { analyticsStore, generateId, parseUserAgent } from '@/lib/analytics/store';
+import { analyticsStore, generateId } from '@/lib/analytics/store';
 import { persistentStore, getTodayDate } from '@/lib/analytics/db';
 import { getGeoLocation } from '@/lib/analytics/geolocation';
-import { VisitorInfo, PageView } from '@/lib/analytics/types';
+import { parseUserAgent } from '@/lib/analytics/user-agent';
+import { VisitorInfo, SessionInfo, PageView } from '@/lib/analytics/types';
 
 export const runtime = 'nodejs'; // Need nodejs for geolocation API calls
 
@@ -23,8 +24,19 @@ interface TrackingData {
   ip?: string;
   city?: string;
   country?: string;
+  countryCode?: string;
   latitude?: number;
   longitude?: number;
+  timezone?: string;
+  // Device info (from middleware user-agent parsing)
+  device?: 'mobile' | 'tablet' | 'desktop';
+  deviceVendor?: string;
+  deviceModel?: string;
+  browser?: string;
+  browserVersion?: string;
+  os?: string;
+  osVersion?: string;
+  engine?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -38,24 +50,39 @@ export async function POST(request: NextRequest) {
     // Get or update visitor
     let visitor = await analyticsStore.getVisitor(data.visitorId);
     const now = new Date().toISOString();
-    
-    // Parse user agent
-    const uaInfo = data.userAgent ? parseUserAgent(data.userAgent) : { device: 'desktop' as const, browser: 'Unknown', os: 'Unknown' };
-    
+
+    // Use device info from middleware (already parsed) or parse here as fallback
+    const uaInfo = data.device
+      ? {
+          device: data.device,
+          deviceVendor: data.deviceVendor,
+          deviceModel: data.deviceModel,
+          browser: data.browser,
+          browserVersion: data.browserVersion,
+          os: data.os,
+          osVersion: data.osVersion,
+          engine: data.engine,
+        }
+      : parseUserAgent(data.userAgent);
+
     // Get geolocation if not provided by Vercel headers
     let geo = {
       city: data.city,
       country: data.country,
+      countryCode: data.countryCode,
       latitude: data.latitude,
       longitude: data.longitude,
+      timezone: data.timezone,
     };
-    
+
     if (!geo.city && data.ip && data.ip !== '127.0.0.1') {
       try {
         const geoData = await getGeoLocation(data.ip);
         geo = {
+          ...geo,
           city: geoData.city,
           country: geoData.country,
+          countryCode: geoData.countryCode,
           latitude: geoData.latitude,
           longitude: geoData.longitude,
         };
@@ -86,12 +113,19 @@ export async function POST(request: NextRequest) {
         ip: data.ip,
         city: geo.city,
         country: geo.country,
+        countryCode: geo.countryCode,
         latitude: geo.latitude,
         longitude: geo.longitude,
+        timezone: geo.timezone,
         userAgent: data.userAgent,
         device: uaInfo.device,
+        deviceVendor: uaInfo.deviceVendor,
+        deviceModel: uaInfo.deviceModel,
         browser: uaInfo.browser,
+        browserVersion: uaInfo.browserVersion,
         os: uaInfo.os,
+        osVersion: uaInfo.osVersion,
+        engine: uaInfo.engine,
         referrer: data.referrer,
       };
       
@@ -109,7 +143,42 @@ export async function POST(request: NextRequest) {
     }
     
     await analyticsStore.upsertVisitor(visitor);
-    
+
+    // Get or create session
+    let session = await analyticsStore.getSession(data.sessionId);
+
+    if (!session) {
+      // Create new session
+      session = {
+        id: data.sessionId,
+        visitorId: data.visitorId,
+        startTime: now,
+        lastActivityTime: now,
+        pageCount: 1,
+        ip: data.ip || '127.0.0.1',
+        city: geo.city,
+        country: geo.country,
+        countryCode: geo.countryCode,
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+        device: uaInfo.device,
+        deviceVendor: uaInfo.deviceVendor,
+        deviceModel: uaInfo.deviceModel,
+        browser: uaInfo.browser,
+        browserVersion: uaInfo.browserVersion,
+        os: uaInfo.os,
+        osVersion: uaInfo.osVersion,
+        landingPage: data.path,
+        referrer: data.referrer,
+      };
+    } else {
+      // Update existing session
+      session.lastActivityTime = now;
+      session.pageCount++;
+    }
+
+    await analyticsStore.upsertSession(session);
+
     // Log page view
     const pageView: PageView = {
       id: generateId(),
@@ -117,22 +186,23 @@ export async function POST(request: NextRequest) {
       visitorId: data.visitorId,
       path: data.path,
       sessionId: data.sessionId,
-      pageInSession: 1, // Would need session tracking for accurate count
+      pageInSession: session.pageCount,
       country: geo.country,
       city: geo.city,
     };
-    
+
     await analyticsStore.logPageView(pageView);
-    
+
     // Also persist to PostgreSQL if available (async, don't wait)
     persistentStore.upsertVisitor(visitor).catch(() => {});
+    persistentStore.upsertSession(session).catch(() => {});
     persistentStore.logPageView(pageView).catch(() => {});
-    
+
     // Update daily stats periodically (every 10th request randomly to avoid overhead)
     if (Math.random() < 0.1) {
       persistentStore.updateDailyStats(getTodayDate()).catch(() => {});
     }
-    
+
     return NextResponse.json({ success: true });
     
   } catch (error) {

@@ -17,7 +17,7 @@ export interface VisitorInfo {
   firstSeen: string;       // ISO timestamp
   lastSeen: string;        // ISO timestamp
   visitCount: number;
-  
+
   // Geolocation (from IP)
   ip?: string;
   city?: string;
@@ -28,18 +28,55 @@ export interface VisitorInfo {
   longitude?: number;
   timezone?: string;
   isp?: string;
-  
-  // Device info
+
+  // Device info (parsed from user agent)
   userAgent?: string;
   device?: 'mobile' | 'tablet' | 'desktop';
-  browser?: string;
-  os?: string;
-  
+  deviceVendor?: string;    // e.g., "Apple", "Samsung"
+  deviceModel?: string;     // e.g., "iPhone", "Galaxy S21"
+  browser?: string;         // e.g., "Chrome", "Safari"
+  browserVersion?: string;
+  os?: string;              // e.g., "iOS", "Android", "Windows"
+  osVersion?: string;
+  engine?: string;          // e.g., "Blink", "WebKit"
+
   // Referrer
   referrer?: string;
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+}
+
+export interface SessionInfo {
+  id: string;               // Session ID (cookie-based)
+  visitorId: string;        // Linked visitor
+  startTime: string;        // ISO timestamp
+  lastActivityTime: string; // ISO timestamp
+  endTime?: string;         // ISO timestamp (when session ends)
+  duration?: number;        // Duration in seconds
+  pageCount: number;        // Number of pages viewed
+
+  // Session context
+  ip: string;
+  city?: string;
+  country?: string;
+  countryCode?: string;
+  latitude?: number;
+  longitude?: number;
+
+  // Device info (snapshot at session start)
+  device?: 'mobile' | 'tablet' | 'desktop';
+  deviceVendor?: string;
+  deviceModel?: string;
+  browser?: string;
+  browserVersion?: string;
+  os?: string;
+  osVersion?: string;
+
+  // Entry/exit
+  landingPage: string;
+  exitPage?: string;
+  referrer?: string;
 }
 
 export interface PageView {
@@ -158,19 +195,25 @@ export interface AnalyticsStore {
   // Visitors
   getVisitor(id: string): Promise<VisitorInfo | null>;
   upsertVisitor(visitor: VisitorInfo): Promise<void>;
-  
+
+  // Sessions
+  getSession(id: string): Promise<SessionInfo | null>;
+  upsertSession(session: SessionInfo): Promise<void>;
+  endSession(id: string, endTime: string, exitPage: string): Promise<void>;
+  getSessions(since: Date, limit?: number): Promise<SessionInfo[]>;
+
   // Page views
   logPageView(pageView: PageView): Promise<void>;
   getPageViews(since: Date, limit?: number): Promise<PageView[]>;
-  
+
   // Feature events
   logFeatureEvent(event: FeatureEvent): Promise<void>;
   getFeatureEvents(since: Date, limit?: number): Promise<FeatureEvent[]>;
-  
+
   // Aggregations
   getSummary(hours: number): Promise<AnalyticsSummary>;
   getRealTimeStats(): Promise<RealTimeStats>;
-  
+
   // Cleanup
   pruneOldData(olderThanDays: number): Promise<number>;
 }
