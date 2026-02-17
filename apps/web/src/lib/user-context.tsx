@@ -9,7 +9,8 @@
  * - Which details are emphasized
  */
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
+import { trackRoleChange, getVisitorId } from "@/lib/analytics/client-tracker";
 
 // User roles with different defaults for Chain-of-Thought visibility
 export type UserRole = 
@@ -100,6 +101,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setRoleState(newRole);
     // Reset override when role changes
     setShowCoTOverride(null);
+
+    // Track role change in analytics
+    const visitorId = getVisitorId();
+    if (visitorId) {
+      trackRoleChange(newRole, visitorId);
+    }
   }, []);
 
   const setShowDeliberationCoT = useCallback((show: boolean) => {

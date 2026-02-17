@@ -45,6 +45,9 @@ export interface VisitorInfo {
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+
+  // User role/persona
+  userRole?: string;  // patient, oncologist, researcher, etc.
 }
 
 export interface SessionInfo {
@@ -77,6 +80,9 @@ export interface SessionInfo {
   landingPage: string;
   exitPage?: string;
   referrer?: string;
+
+  // User role/persona
+  userRole?: string;  // patient, oncologist, researcher, etc.
 }
 
 export interface PageView {
@@ -99,6 +105,9 @@ export interface PageView {
   // Geolocation (denormalized for quick queries)
   country?: string;
   city?: string;
+
+  // User role/persona
+  userRole?: string;  // patient, oncologist, researcher, etc.
 }
 
 export interface FeatureEvent {

@@ -186,8 +186,17 @@ async function initDatabase(dbUrl: string): Promise<void> {
       )
     `);
     
+    // Add user_role column to existing tables (migration)
+    try {
+      await pool.query(`ALTER TABLE analytics_visitors ADD COLUMN IF NOT EXISTS user_role TEXT`);
+      await pool.query(`ALTER TABLE analytics_sessions ADD COLUMN IF NOT EXISTS user_role TEXT`);
+      await pool.query(`ALTER TABLE analytics_pageviews ADD COLUMN IF NOT EXISTS user_role TEXT`);
+    } catch (e) {
+      // Ignore if columns already exist
+    }
+
     console.log('[Analytics DB] Tables created/verified');
-    
+
     db = {
       query: async (sql: string, params?: unknown[]) => {
         const result = await pool.query(sql, params);
@@ -219,22 +228,23 @@ export const persistentStore = {
           id, first_seen, last_seen, visit_count, ip, city, region, country, country_code,
           latitude, longitude, timezone, user_agent, device, device_vendor, device_model,
           browser, browser_version, os, os_version, engine, referrer,
-          utm_source, utm_medium, utm_campaign
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+          utm_source, utm_medium, utm_campaign, user_role
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
         ON CONFLICT (id) DO UPDATE SET
           last_seen = EXCLUDED.last_seen,
           visit_count = analytics_visitors.visit_count + 1,
           city = COALESCE(EXCLUDED.city, analytics_visitors.city),
           country = COALESCE(EXCLUDED.country, analytics_visitors.country),
           latitude = COALESCE(EXCLUDED.latitude, analytics_visitors.latitude),
-          longitude = COALESCE(EXCLUDED.longitude, analytics_visitors.longitude)
+          longitude = COALESCE(EXCLUDED.longitude, analytics_visitors.longitude),
+          user_role = COALESCE(EXCLUDED.user_role, analytics_visitors.user_role)
       `, [
         visitor.id, visitor.firstSeen, visitor.lastSeen, visitor.visitCount,
         visitor.ip, visitor.city, visitor.region, visitor.country, visitor.countryCode,
         visitor.latitude, visitor.longitude, visitor.timezone, visitor.userAgent,
         visitor.device, visitor.deviceVendor, visitor.deviceModel,
         visitor.browser, visitor.browserVersion, visitor.os, visitor.osVersion, visitor.engine,
-        visitor.referrer, visitor.utmSource, visitor.utmMedium, visitor.utmCampaign
+        visitor.referrer, visitor.utmSource, visitor.utmMedium, visitor.utmCampaign, visitor.userRole
       ]);
     } catch (e) {
       console.error('[Analytics DB] Failed to upsert visitor:', e);
@@ -280,6 +290,7 @@ export const persistentStore = {
         landingPage: String(row.landing_page),
         exitPage: row.exit_page ? String(row.exit_page) : undefined,
         referrer: row.referrer ? String(row.referrer) : undefined,
+        userRole: row.user_role ? String(row.user_role) : undefined,
       };
     } catch (e) {
       console.error('[Analytics DB] Failed to get session:', e);
@@ -300,14 +311,15 @@ export const persistentStore = {
           id, visitor_id, start_time, last_activity_time, end_time, duration, page_count,
           ip, city, country, country_code, latitude, longitude,
           device, device_vendor, device_model, browser, browser_version, os, os_version,
-          landing_page, exit_page, referrer
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+          landing_page, exit_page, referrer, user_role
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
         ON CONFLICT (id) DO UPDATE SET
           last_activity_time = EXCLUDED.last_activity_time,
           end_time = EXCLUDED.end_time,
           duration = EXCLUDED.duration,
           page_count = EXCLUDED.page_count,
-          exit_page = EXCLUDED.exit_page
+          exit_page = EXCLUDED.exit_page,
+          user_role = COALESCE(EXCLUDED.user_role, analytics_sessions.user_role)
       `, [
         session.id, session.visitorId, session.startTime, session.lastActivityTime,
         session.endTime, session.duration, session.pageCount,
@@ -315,7 +327,7 @@ export const persistentStore = {
         session.latitude, session.longitude,
         session.device, session.deviceVendor, session.deviceModel,
         session.browser, session.browserVersion, session.os, session.osVersion,
-        session.landingPage, session.exitPage, session.referrer
+        session.landingPage, session.exitPage, session.referrer, session.userRole
       ]);
     } catch (e) {
       console.error('[Analytics DB] Failed to upsert session:', e);
@@ -399,11 +411,11 @@ export const persistentStore = {
     try {
       await database.query(`
         INSERT INTO analytics_pageviews (
-          id, timestamp, visitor_id, path, session_id, page_in_session, load_time_ms, country, city
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          id, timestamp, visitor_id, path, session_id, page_in_session, load_time_ms, country, city, user_role
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `, [
         pv.id, pv.timestamp, pv.visitorId, pv.path, pv.sessionId,
-        pv.pageInSession, pv.loadTimeMs, pv.country, pv.city
+        pv.pageInSession, pv.loadTimeMs, pv.country, pv.city, pv.userRole
       ]);
     } catch (e) {
       console.error('[Analytics DB] Failed to log page view:', e);

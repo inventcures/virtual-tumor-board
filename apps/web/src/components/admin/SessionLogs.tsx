@@ -199,6 +199,14 @@ export function SessionLogs({ timeRange }: SessionLogsProps) {
                     <span className="text-slate-300 truncate">{getDeviceLabel(session)}</span>
                   </div>
 
+                  {/* User Role */}
+                  {session.userRole && (
+                    <div className="flex items-center gap-2 text-sm min-w-[140px]">
+                      <span className="text-indigo-400">👤</span>
+                      <span className="text-slate-300 capitalize">{session.userRole.replace('-', ' ')}</span>
+                    </div>
+                  )}
+
                   {/* Location */}
                   <div className="flex items-center gap-2 text-sm min-w-[180px]">
                     <MapPin className="w-4 h-4 text-amber-400" />
@@ -293,6 +301,12 @@ export function SessionLogs({ timeRange }: SessionLogsProps) {
                           Device Information
                         </h4>
                         <dl className="space-y-1.5 text-sm">
+                          {session.userRole && (
+                            <div className="flex justify-between">
+                              <dt className="text-slate-400">Viewing As:</dt>
+                              <dd className="text-indigo-300 capitalize font-medium">{session.userRole.replace('-', ' ')}</dd>
+                            </div>
+                          )}
                           <div className="flex justify-between">
                             <dt className="text-slate-400">Type:</dt>
                             <dd className="text-slate-300 capitalize">{session.device || 'Unknown'}</dd>
