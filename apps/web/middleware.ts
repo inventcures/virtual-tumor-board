@@ -120,6 +120,14 @@ export async function middleware(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') || undefined;
   const deviceInfo = parseUserAgent(userAgent);
 
+  // Debug logging for admin paths
+  if (pathname.includes('admin')) {
+    console.log('[Middleware] Admin path detected, will track:', pathname, {
+      visitorId,
+      sessionId,
+    });
+  }
+
   // Track page view asynchronously (don't block response)
   const trackingData = {
     visitorId,

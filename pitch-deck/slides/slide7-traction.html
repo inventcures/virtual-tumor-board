@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FAF9F6;
+  font-family: Arial, sans-serif;
+  display: flex;
+}
+.container {
+  margin: 38pt 60pt 85pt 60pt;
+  flex: 1;
+}
+.header-bar {
+  width: 80pt;
+  height: 5pt;
+  background: #E76F51;
+  margin-bottom: 20pt;
+}
+h1 {
+  font-size: 34pt;
+  font-weight: bold;
+  margin: 0 0 30pt 0;
+  color: #1A5E63;
+}
+.content-flex {
+  display: flex;
+  gap: 30pt;
+}
+.left-col {
+  flex: 1;
+}
+.milestone-item {
+  margin-bottom: 18pt;
+}
+.milestone-item h2 {
+  font-size: 13.5pt;
+  font-weight: bold;
+  color: #E76F51;
+  margin: 0 0 8pt 0;
+}
+.milestone-item p {
+  font-size: 13.5pt;
+  color: #2C3E50;
+  line-height: 1.35;
+  margin: 0;
+}
+.right-col {
+  flex: 1;
+  background: #FFFFFF;
+  padding: 16pt 20pt;
+  border-radius: 8pt;
+  box-shadow: 2px 2px 12px rgba(0, 0, 0, 0.08);
+}
+.right-col h2 {
+  font-size: 16pt;
+  font-weight: bold;
+  color: #1A5E63;
+  margin: 0 0 20pt 0;
+}
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.feature-list li {
+  font-size: 14pt;
+  color: #2C3E50;
+  margin-bottom: 12pt;
+  padding-left: 20pt;
+  position: relative;
+  line-height: 1.4;
+}
+.feature-list li::before {
+  content: "✓";
+  color: #3A9EA5;
+  font-weight: bold;
+  position: absolute;
+  left: 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header-bar"></div>
+  <h1>Early Traction</h1>
+
+  <div class="content-flex">
+    <div class="left-col">
+      <div class="milestone-item">
+        <h2>Live Platform</h2>
+        <p>Production system deployed and accessible to healthcare providers</p>
+      </div>
+
+      <div class="milestone-item">
+        <h2>User Analytics</h2>
+        <p>Real-time tracking of deliberations, imaging analysis, and geographic reach</p>
+      </div>
+
+      <div class="milestone-item">
+        <h2>Multi-Modal Integration</h2>
+        <p>Beyond text - DICOM support, phone-captured scans, 3D tumor segmentation</p>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <h2>Platform Features</h2>
+      <ul class="feature-list">
+        <li>5-agent deliberation system</li>
+        <li>Medical imaging analysis (CT/MRI/X-ray)</li>
+        <li>DICOM viewer with longitudinal support</li>
+        <li>Real-time consensus synthesis</li>
+        <li>Geographic analytics dashboard</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

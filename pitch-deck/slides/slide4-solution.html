@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FAF9F6;
+  font-family: Arial, sans-serif;
+  display: flex;
+}
+.container {
+  margin: 40pt 60pt 75pt 60pt;
+  flex: 1;
+}
+.header-bar {
+  width: 80pt;
+  height: 5pt;
+  background: #E76F51;
+  margin-bottom: 20pt;
+}
+h1 {
+  font-size: 36pt;
+  font-weight: bold;
+  margin: 0 0 16pt 0;
+  color: #1A5E63;
+}
+.subtitle {
+  font-size: 15pt;
+  color: #6B7280;
+  margin: 0 0 22pt 0;
+  line-height: 1.3;
+}
+.specialist-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10pt;
+  margin-bottom: 20pt;
+}
+.specialist-card {
+  background: #FFFFFF;
+  padding: 10pt 14pt;
+  border-radius: 6pt;
+  border-left: 4pt solid #3A9EA5;
+  flex: 0 0 calc(33.333% - 7pt);
+  box-shadow: 1px 1px 8px rgba(0, 0, 0, 0.05);
+}
+.specialist-card p {
+  font-size: 13pt;
+  font-weight: bold;
+  color: #2C3E50;
+  margin: 0;
+}
+.value-prop-box {
+  background: #E76F51;
+  padding: 16pt 22pt;
+  border-radius: 8pt;
+}
+.value-prop-box p {
+  color: #FFFFFF;
+  font-size: 15pt;
+  font-weight: bold;
+  text-align: center;
+  margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header-bar"></div>
+  <h1>What We Do</h1>
+  <p class="subtitle">AI-powered virtual tumor board that replicates the multidisciplinary consensus process</p>
+
+  <div class="specialist-grid">
+    <div class="specialist-card">
+      <p>Medical Oncologist</p>
+    </div>
+    <div class="specialist-card">
+      <p>Surgical Oncologist</p>
+    </div>
+    <div class="specialist-card">
+      <p>Radiation Oncologist</p>
+    </div>
+    <div class="specialist-card">
+      <p>Radiologist</p>
+    </div>
+    <div class="specialist-card">
+      <p>Pathologist</p>
+    </div>
+    <div class="specialist-card">
+      <p>Moderator (Synthesis)</p>
+    </div>
+  </div>
+
+  <div class="value-prop-box">
+    <p>Five specialists deliberating together → One comprehensive, evidence-based recommendation</p>
+  </div>
+</div>
+</body>
+</html>

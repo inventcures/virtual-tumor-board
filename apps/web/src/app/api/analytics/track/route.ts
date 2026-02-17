@@ -42,7 +42,16 @@ interface TrackingData {
 export async function POST(request: NextRequest) {
   try {
     const data: TrackingData = await request.json();
-    
+
+    // Debug logging for admin paths
+    if (data.path?.includes('admin')) {
+      console.log('[Analytics Track] Admin path detected:', data.path, {
+        visitorId: data.visitorId,
+        sessionId: data.sessionId,
+        timestamp: data.timestamp,
+      });
+    }
+
     if (!data.visitorId || !data.path) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }

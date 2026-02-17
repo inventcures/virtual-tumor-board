@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FAF9F6;
+  font-family: Arial, sans-serif;
+  display: flex;
+}
+.container {
+  margin: 38pt 60pt 102pt 60pt;
+  flex: 1;
+}
+.header-bar {
+  width: 80pt;
+  height: 5pt;
+  background: #E76F51;
+  margin-bottom: 20pt;
+}
+h1 {
+  font-size: 36pt;
+  font-weight: bold;
+  margin: 0 0 24pt 0;
+  color: #1A5E63;
+}
+.stat-grid {
+  display: flex;
+  gap: 20pt;
+  margin-bottom: 20pt;
+}
+.stat-box {
+  flex: 1;
+  background: #FFFFFF;
+  padding: 16pt;
+  border-radius: 8pt;
+  box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.06);
+}
+.stat-number {
+  font-size: 38pt;
+  font-weight: bold;
+  color: #E76F51;
+  margin: 0 0 6pt 0;
+}
+.stat-label {
+  font-size: 13pt;
+  color: #2C3E50;
+  line-height: 1.35;
+  margin: 0;
+}
+.insight-box {
+  background: #1A5E63;
+  padding: 16pt 20pt;
+  border-radius: 8pt;
+}
+.insight-box p {
+  color: #FFFFFF;
+  font-size: 15pt;
+  line-height: 1.4;
+  margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header-bar"></div>
+  <h1>The Access Crisis</h1>
+
+  <div class="stat-grid">
+    <div class="stat-box">
+      <p class="stat-number">77%</p>
+      <p class="stat-label">of Indian cancer patients lack tumor board access</p>
+    </div>
+
+    <div class="stat-box">
+      <p class="stat-number">1.4M</p>
+      <p class="stat-label">new cancer cases annually in India</p>
+    </div>
+
+    <div class="stat-box">
+      <p class="stat-number">3-4<br>weeks</p>
+      <p class="stat-label">typical treatment planning time</p>
+    </div>
+  </div>
+
+  <div class="insight-box">
+    <p>Severe specialist shortage in tier-2/tier-3 cities means most patients never get the expert review that could change their outcomes.</p>
+  </div>
+</div>
+</body>
+</html>
