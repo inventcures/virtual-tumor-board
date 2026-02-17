@@ -4,7 +4,7 @@
  * Extracts detailed device, browser, and OS information from user agent strings.
  */
 
-import UAParser from 'ua-parser-js';
+import { UAParser } from 'ua-parser-js';
 
 export interface ParsedUserAgent {
   device: 'mobile' | 'tablet' | 'desktop';

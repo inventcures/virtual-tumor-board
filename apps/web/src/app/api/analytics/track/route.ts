@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       path: data.path,
     });
 
-    if (needsGeoLookup) {
+    if (needsGeoLookup && data.ip) {
       try {
         console.log('[Analytics] Looking up geolocation for IP:', data.ip);
         const geoData = await getGeoLocation(data.ip);
