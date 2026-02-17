@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { parseUserAgent } from './src/lib/analytics/user-agent';
+import { extractIP, extractVercelGeo } from './src/lib/analytics/geolocation';
 
 // Paths to skip tracking
 const SKIP_PATHS = [
@@ -139,11 +140,19 @@ export async function middleware(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') || undefined;
   const deviceInfo = parseUserAgent(userAgent);
 
+  // Extract IP address (handles Railway, Vercel, Cloudflare)
+  const ip = extractIP(request);
+
+  // Try to get geo from Vercel headers first (faster)
+  const vercelGeo = extractVercelGeo(request);
+
   // Debug logging for admin paths
   if (pathname.includes('admin')) {
     console.log('[Middleware] Admin path detected, will track:', pathname, {
       visitorId,
       sessionId,
+      ip,
+      hasVercelGeo: !!vercelGeo,
     });
   }
 
@@ -155,23 +164,14 @@ export async function middleware(request: NextRequest) {
     timestamp: new Date().toISOString(),
     referrer: request.headers.get('referer') || undefined,
     userAgent,
-    // Geolocation from headers (Vercel/Cloudflare provides these)
-    ip: request.headers.get('x-real-ip') ||
-        request.headers.get('x-forwarded-for')?.split(',')[0] ||
-        request.headers.get('cf-connecting-ip') ||
-        '127.0.0.1',
-    city: request.headers.get('x-vercel-ip-city')
-      ? decodeURIComponent(request.headers.get('x-vercel-ip-city')!)
-      : undefined,
-    country: request.headers.get('x-vercel-ip-country') || undefined,
-    countryCode: request.headers.get('x-vercel-ip-country-code') || undefined,
-    latitude: request.headers.get('x-vercel-ip-latitude')
-      ? parseFloat(request.headers.get('x-vercel-ip-latitude')!)
-      : undefined,
-    longitude: request.headers.get('x-vercel-ip-longitude')
-      ? parseFloat(request.headers.get('x-vercel-ip-longitude')!)
-      : undefined,
-    timezone: request.headers.get('x-vercel-ip-timezone') || undefined,
+    // IP and geolocation
+    ip,
+    city: vercelGeo?.city,
+    country: vercelGeo?.country,
+    countryCode: vercelGeo?.countryCode,
+    latitude: vercelGeo?.latitude,
+    longitude: vercelGeo?.longitude,
+    timezone: vercelGeo?.timezone,
     // Device/browser/OS info (parsed from user agent)
     ...deviceInfo,
   };

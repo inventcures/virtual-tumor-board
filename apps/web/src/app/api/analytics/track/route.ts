@@ -84,28 +84,37 @@ export async function POST(request: NextRequest) {
       timezone: data.timezone,
     };
 
-    console.log('[Analytics Track] IP and geo data:', {
+    // Always attempt geolocation lookup if we don't have city/country AND have a valid IP
+    const needsGeoLookup = !geo.city && data.ip && data.ip !== '127.0.0.1' && !data.ip.startsWith('192.168.');
+
+    console.log('[Analytics Track] Geo check:', {
       ip: data.ip,
       hasCity: !!geo.city,
       hasCountry: !!geo.country,
-      willLookup: !geo.city && data.ip && data.ip !== '127.0.0.1',
+      needsGeoLookup,
+      path: data.path,
     });
 
-    if (!geo.city && data.ip && data.ip !== '127.0.0.1') {
+    if (needsGeoLookup) {
       try {
         console.log('[Analytics] Looking up geolocation for IP:', data.ip);
         const geoData = await getGeoLocation(data.ip);
-        console.log('[Analytics] Geolocation result:', geoData);
+        console.log('[Analytics] Geolocation API result:', {
+          city: geoData.city,
+          country: geoData.country,
+          ip: geoData.ip,
+        });
+
         geo = {
-          ...geo,
           city: geoData.city,
           country: geoData.country,
           countryCode: geoData.countryCode,
           latitude: geoData.latitude,
           longitude: geoData.longitude,
+          timezone: geoData.timezone,
         };
       } catch (e) {
-        console.error('[Analytics] Geolocation lookup failed:', e);
+        console.error('[Analytics] Geolocation lookup FAILED:', e instanceof Error ? e.message : e);
       }
     }
     

@@ -62,23 +62,30 @@ export async function getGeoLocation(ip: string): Promise<GeoLocation> {
 }
 
 /**
- * Extract IP from request headers (handles proxies, Vercel, Cloudflare)
+ * Extract IP from request headers (handles Railway, Vercel, Cloudflare, proxies)
  */
 export function extractIP(request: Request): string {
   const headers = request.headers;
-  
+
+  // Cloudflare (highest priority - most accurate)
+  const cfIp = headers.get('cf-connecting-ip');
+  if (cfIp && cfIp !== '127.0.0.1') return cfIp;
+
   // Vercel
   const vercelIp = headers.get('x-real-ip') || headers.get('x-vercel-forwarded-for');
-  if (vercelIp) return vercelIp.split(',')[0].trim();
-  
-  // Cloudflare
-  const cfIp = headers.get('cf-connecting-ip');
-  if (cfIp) return cfIp;
-  
-  // Standard proxy headers
+  if (vercelIp && vercelIp !== '127.0.0.1') return vercelIp.split(',')[0].trim();
+
+  // Railway / Standard proxy headers (X-Forwarded-For)
   const forwarded = headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0].trim();
-  
+  if (forwarded) {
+    const ip = forwarded.split(',')[0].trim();
+    if (ip && ip !== '127.0.0.1') return ip;
+  }
+
+  // Real IP header (fallback)
+  const realIp = headers.get('x-real-ip');
+  if (realIp && realIp !== '127.0.0.1') return realIp;
+
   // Fallback
   return '127.0.0.1';
 }
