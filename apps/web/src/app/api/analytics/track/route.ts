@@ -84,9 +84,18 @@ export async function POST(request: NextRequest) {
       timezone: data.timezone,
     };
 
+    console.log('[Analytics Track] IP and geo data:', {
+      ip: data.ip,
+      hasCity: !!geo.city,
+      hasCountry: !!geo.country,
+      willLookup: !geo.city && data.ip && data.ip !== '127.0.0.1',
+    });
+
     if (!geo.city && data.ip && data.ip !== '127.0.0.1') {
       try {
+        console.log('[Analytics] Looking up geolocation for IP:', data.ip);
         const geoData = await getGeoLocation(data.ip);
+        console.log('[Analytics] Geolocation result:', geoData);
         geo = {
           ...geo,
           city: geoData.city,
@@ -96,7 +105,7 @@ export async function POST(request: NextRequest) {
           longitude: geoData.longitude,
         };
       } catch (e) {
-        console.warn('[Analytics] Geolocation lookup failed:', e);
+        console.error('[Analytics] Geolocation lookup failed:', e);
       }
     }
     
