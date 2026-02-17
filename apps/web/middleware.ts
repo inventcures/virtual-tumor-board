@@ -146,13 +146,22 @@ export async function middleware(request: NextRequest) {
   // Try to get geo from Vercel headers first (faster)
   const vercelGeo = extractVercelGeo(request);
 
-  // Debug logging for admin paths
+  // Debug logging
   if (pathname.includes('admin')) {
     console.log('[Middleware] Admin path detected, will track:', pathname, {
       visitorId,
       sessionId,
       ip,
       hasVercelGeo: !!vercelGeo,
+    });
+  }
+
+  // Log direct visits (cookie auth, no token param)
+  if (siteAccessToken && !tokenParam && request.cookies.get('vtb_auth_v2')?.value) {
+    console.log('[Middleware] Direct visit (cookie auth):', pathname, {
+      visitorId,
+      sessionId,
+      hasAuthCookie: true,
     });
   }
 
