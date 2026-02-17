@@ -212,9 +212,9 @@ export function SessionLogs({ timeRange }: SessionLogsProps) {
                     <MapPin className="w-4 h-4 text-amber-400" />
                     <span className="text-slate-300">
                       {session.city && session.country
-                        ? `${session.city}, ${getCountryFlag(session.countryCode)} ${session.country}`
+                        ? `${session.city}, ${getCountryFlag(session.countryCode || '')} ${session.country}`
                         : session.country
-                        ? `${getCountryFlag(session.countryCode)} ${session.country}`
+                        ? `${getCountryFlag(session.countryCode || '')} ${session.country}`
                         : 'Unknown'}
                     </span>
                   </div>
@@ -280,7 +280,7 @@ export function SessionLogs({ timeRange }: SessionLogsProps) {
                             <div className="flex justify-between">
                               <dt className="text-slate-400">Country:</dt>
                               <dd className="text-slate-300">
-                                {getCountryFlag(session.countryCode)} {session.country}
+                                {getCountryFlag(session.countryCode || '')} {session.country}
                               </dd>
                             </div>
                           )}
