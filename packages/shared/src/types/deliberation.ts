@@ -139,9 +139,13 @@ export interface CacheStats {
 
 /**
  * Format case data for agent consumption
+ * Includes security: Masking PII
  */
 export function formatCaseForAgent(caseData: CaseData): string {
   const { patient, diagnosis, clinicalQuestion } = caseData;
+
+  // Mask PII: Use initials or generic name
+  const maskedName = patient.name.split(' ').map(n => n[0] + '.').join(' ');
 
   const biomarkersStr = diagnosis.biomarkers
     .map((b) => `- ${b.name}: ${b.result}${b.interpretation ? ` (${b.interpretation})` : ""}`)
@@ -153,7 +157,7 @@ export function formatCaseForAgent(caseData: CaseData): string {
 
   return `
 ## PATIENT INFORMATION
-- Name: ${patient.name}
+- Name: ${maskedName} (De-identified)
 - Age/Gender: ${patient.age}${patient.gender === "male" ? "M" : patient.gender === "female" ? "F" : "O"}
 - ECOG Performance Status: ${patient.ecogPs}
 - Comorbidities: ${patient.comorbidities?.join(", ") || "None documented"}

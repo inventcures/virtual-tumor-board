@@ -1,22 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Search, Plus, Save, Clock, Activity, AlertCircle, Heart } from "lucide-react";
+import { ClinicalResponse, ToxicityGrade } from "@vtb/shared";
+
+const CLINICAL_RESPONSES: ClinicalResponse[] = [
+  "Complete Response (CR)",
+  "Partial Response (PR)",
+  "Stable Disease (SD)",
+  "Progressive Disease (PD)",
+  "Deceased"
+];
+
+const TOXICITY_GRADES: ToxicityGrade[] = [
+  "Grade 0-1 (Mild)",
+  "Grade 2 (Moderate)",
+  "Grade 3 (Severe)",
+  "Grade 4 (Life-threatening)",
+  "Grade 5 (Fatal)"
+];
+
+// Mock past cases
+const PAST_CASES = [
+  { id: "case-2025-831", name: "Rahul Sharma", diagnosis: "Lung NSCLC Stage IIIA", date: "2025-10-15" },
+  { id: "case-2025-902", name: "Priya Desai", diagnosis: "Breast IDC Stage II", date: "2025-11-02" },
+  { id: "case-2026-015", name: "Amit Patel", diagnosis: "Colon Adenocarcinoma Stage III", date: "2026-01-05" },
+];
 
 export function OutcomeTracker() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCase, setSelectedCase] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
 
-  // Mock past cases
-  const pastCases = [
-    { id: "case-2025-831", name: "Rahul Sharma", diagnosis: "Lung NSCLC Stage IIIA", date: "2025-10-15" },
-    { id: "case-2025-902", name: "Priya Desai", diagnosis: "Breast IDC Stage II", date: "2025-11-02" },
-    { id: "case-2026-015", name: "Amit Patel", diagnosis: "Colon Adenocarcinoma Stage III", date: "2026-01-05" },
-  ];
+  const filteredCases = useMemo(() => {
+    if (!searchTerm) return PAST_CASES;
+    const lower = searchTerm.toLowerCase();
+    return PAST_CASES.filter(c => 
+      c.id.toLowerCase().includes(lower) || 
+      c.name.toLowerCase().includes(lower)
+    );
+  }, [searchTerm]);
 
-  const filteredCases = pastCases.filter(c => 
-    c.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const selectedCase = useMemo(() => 
+    PAST_CASES.find(c => c.id === selectedCaseId),
+    [selectedCaseId]
   );
 
   return (
@@ -39,9 +65,9 @@ export function OutcomeTracker() {
           {filteredCases.map(c => (
             <button
               key={c.id}
-              onClick={() => setSelectedCase(c.id)}
+              onClick={() => setSelectedCaseId(c.id)}
               className={`w-full text-left p-4 hover:bg-slate-800 transition-colors ${
-                selectedCase === c.id ? "bg-indigo-900/20 border-l-2 border-indigo-500" : ""
+                selectedCaseId === c.id ? "bg-indigo-900/20 border-l-2 border-indigo-500" : ""
               }`}
             >
               <div className="flex justify-between items-start mb-1">
@@ -62,7 +88,7 @@ export function OutcomeTracker() {
         {selectedCase ? (
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">Log Outcome: {pastCases.find(c => c.id === selectedCase)?.name}</h2>
+              <h2 className="text-xl font-semibold text-white">Log Outcome: {selectedCase.name}</h2>
               <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-medium border border-indigo-500/30">
                 Data used for VTB learning
               </span>
@@ -78,11 +104,7 @@ export function OutcomeTracker() {
                   <div>
                     <label className="block text-sm text-slate-300 mb-1">Current Status</label>
                     <select className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
-                      <option>Complete Response (CR)</option>
-                      <option>Partial Response (PR)</option>
-                      <option>Stable Disease (SD)</option>
-                      <option>Progressive Disease (PD)</option>
-                      <option>Deceased</option>
+                      {CLINICAL_RESPONSES.map(res => <option key={res}>{res}</option>)}
                     </select>
                   </div>
                   <div>
@@ -100,11 +122,7 @@ export function OutcomeTracker() {
                 <div>
                   <label className="block text-sm text-slate-300 mb-1">Highest Grade Toxicity Experienced</label>
                   <select className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
-                    <option>Grade 0-1 (Mild)</option>
-                    <option>Grade 2 (Moderate)</option>
-                    <option>Grade 3 (Severe)</option>
-                    <option>Grade 4 (Life-threatening)</option>
-                    <option>Grade 5 (Fatal)</option>
+                    {TOXICITY_GRADES.map(grade => <option key={grade}>{grade}</option>)}
                   </select>
                 </div>
                 <div>

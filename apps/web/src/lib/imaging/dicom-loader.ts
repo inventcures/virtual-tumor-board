@@ -424,6 +424,7 @@ export function getActiveCDN(): string {
 
 /**
  * Render a DICOM slice to ImageData with windowing
+ * OPTIMIZED: Uses 32-bit buffer view and pre-calculated factors
  */
 export function renderDicomSlice(
   slice: DicomSlice,
@@ -436,13 +437,13 @@ export function renderDicomSlice(
   const { rows, columns, rescaleSlope, rescaleIntercept } = metadata;
   
   const imageData = new ImageData(columns, rows);
-  const data = imageData.data;
+  // Use a 32-bit view for 4x faster pixel setting
+  const buf32 = new Uint32Array(imageData.data.buffer);
   
   // Window calculations
   const windowMin = windowCenter - windowWidth / 2;
-  const windowMax = windowCenter + windowWidth / 2;
   
-  // Brightness/contrast adjustments
+  // Pre-calculate factors to keep the inner loop tight
   const brightFactor = brightness / 100;
   const contrastFactor = (259 * (contrast + 155)) / (255 * (259 - contrast + 155));
   
@@ -454,27 +455,26 @@ export function renderDicomSlice(
     let normalized: number;
     if (value <= windowMin) {
       normalized = 0;
-    } else if (value >= windowMax) {
+    } else if (value >= (windowMin + windowWidth)) {
       normalized = 255;
     } else {
       normalized = ((value - windowMin) / windowWidth) * 255;
     }
     
     // Apply brightness
-    normalized *= brightFactor;
+    if (brightness !== 100) normalized *= brightFactor;
     
     // Apply contrast
-    normalized = contrastFactor * (normalized - 128) + 128;
+    if (contrast !== 100) {
+      normalized = contrastFactor * (normalized - 128) + 128;
+    }
     
     // Clamp
-    const finalValue = Math.max(0, Math.min(255, Math.round(normalized)));
+    const final = normalized < 0 ? 0 : (normalized > 255 ? 255 : (normalized | 0));
     
-    // Set RGBA (grayscale)
-    const pixelIndex = i * 4;
-    data[pixelIndex] = finalValue;     // R
-    data[pixelIndex + 1] = finalValue; // G
-    data[pixelIndex + 2] = finalValue; // B
-    data[pixelIndex + 3] = 255;        // A
+    // Set RGBA in one 32-bit operation (Little Endian: ABGR)
+    // 0xFF000000 | (B << 16) | (G << 8) | R
+    buf32[i] = 0xFF000000 | (final << 16) | (final << 8) | final;
   }
   
   return imageData;

@@ -6,6 +6,11 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { 
+  LLMProvider, 
+  ProviderFactory, 
+  LLMProviderType 
+} from "./llm-provider";
 import type {
   AgentId,
   AgentResponse,
@@ -31,6 +36,8 @@ import { evaluateSocraticHypothesis, type DeltaReport } from "./socratic-evaluat
 import { PreferenceMemoryStore } from "../memory/preference-store";
 
 export interface OrchestratorConfig {
+  /** LLM Provider to use */
+  provider?: LLMProviderType;
   /** Anthropic API key */
   apiKey?: string;
   /** Model to use */
@@ -42,8 +49,9 @@ export interface OrchestratorConfig {
 }
 
 const DEFAULT_CONFIG: Required<OrchestratorConfig> = {
-  apiKey: process.env.ANTHROPIC_API_KEY || "",
-  model: "claude-sonnet-4-20250514",
+  provider: (process.env.VTB_LLM_PROVIDER as LLMProviderType) || "anthropic",
+  apiKey: process.env.ANTHROPIC_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
+  model: process.env.VTB_LLM_MODEL || "claude-sonnet-4-20250514",
   maxTokens: 4096,
   verbose: false,
 };
@@ -54,16 +62,14 @@ const DEFAULT_CONFIG: Required<OrchestratorConfig> = {
  * Coordinates multi-agent deliberation for oncology cases.
  */
 export class TumorBoardOrchestrator {
-  private client: Anthropic;
+  private provider: LLMProvider;
   private config: Required<OrchestratorConfig>;
   private currentPhase: DeliberationPhase = "initializing";
   private memoryStore: PreferenceMemoryStore;
 
   constructor(config: OrchestratorConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.client = new Anthropic({
-      apiKey: this.config.apiKey,
-    });
+    this.provider = ProviderFactory.create(this.config.provider, this.config.apiKey);
     this.memoryStore = new PreferenceMemoryStore();
   }
 
@@ -77,27 +83,26 @@ export class TumorBoardOrchestrator {
     const startTime = Date.now();
     const agents = options.includeAgents || DEFAULT_AGENTS;
     
-    this.log(`Starting deliberation for case: ${caseData.id}`);
-    this.log(`Active agents: ${agents.join(", ")}`);
+    // Security: Mask PII in logs
+    const maskedCaseId = caseData.id.slice(0, 4) + "****";
+    this.log("Starting deliberation for case: " + maskedCaseId);
+    this.log("Active agents: " + agents.join(", "));
+    this.log("Using provider: " + this.config.provider + " (" + this.config.model + ")");
 
     try {
       // V7 Phase 0: Gatekeeper Check
-      // Ensure we have enough info to proceed. If missing, PI generates specific questions.
       this.setPhase("gatekeeper_check", options.onPhaseChange);
       const gatekeeperResult = await this.executeGatekeeper(caseData, options);
       
       // V7 Phase 1: Independent Hypothesis Generation (Round 1)
-      // Specialists generate plans in isolation to avoid groupthink.
       this.setPhase("independent_hypothesis", options.onPhaseChange);
       const round1Results = await this.executeRound1(caseData, agents, options);
       
       // V7 Phase 2: Scientific Critique & Stewardship (New Round 2)
-      // Dr. Tark (Critic) and Dr. Samata (Stewardship) review the plans.
       this.setPhase("scientific_critique", options.onPhaseChange);
       const critiqueResults = await this.executeCritiqueRound(caseData, round1Results, options);
       
       // V7 Phase 3: Debate & Conflict Resolution
-      // Specialists respond to critiques + PI applies domain veto.
       this.setPhase("round2_debate", options.onPhaseChange);
       const round2Results = await this.executeRound2(caseData, round1Results, critiqueResults, options);
       
@@ -113,8 +118,9 @@ export class TumorBoardOrchestrator {
         try {
           const userHypothesis = await options.onSocraticPrompt();
           if (userHypothesis && userHypothesis.trim() !== "") {
+            const anthropicClient = new Anthropic({ apiKey: this.config.apiKey });
             const socraticDelta = await evaluateSocraticHypothesis(
-              this.client,
+              anthropicClient,
               this.config.model,
               caseData,
               userHypothesis,
@@ -194,8 +200,6 @@ export class TumorBoardOrchestrator {
     // Consult PI to check for missing info
     const piResponse = await this.consultAgent("principal-investigator", caseData, options);
     
-    // In a real implementation, if missing info is critical, we might pause here.
-    // For now, we log it and proceed, letting agents make assumptions if needed.
     const hasMissingInfo = piResponse.response.toLowerCase().includes("missing information");
     
     if (hasMissingInfo) {
@@ -223,30 +227,47 @@ export class TumorBoardOrchestrator {
     const responses = new Map<AgentId, AgentResponse>();
     let totalCost = 0;
 
-    // Execute agent consultations in parallel
-    const consultations = agents.map(async (agentId) => {
-      let response: AgentResponse;
-      
-      // V14: Check for Reflective Agent Loop
-      if (options.reflectiveConfig?.enableSelfCritique) {
-        response = await this.consultReflectiveAgent(agentId, caseData, options);
-      } else {
-        response = await this.consultAgent(agentId, caseData, options);
-      }
+    // Execute agent consultations in parallel using allSettled for robustness
+    const results = await Promise.allSettled(
+      agents.map(async (agentId) => {
+        let response: AgentResponse;
+        
+        if (options.reflectiveConfig?.enableSelfCritique) {
+          response = await this.consultReflectiveAgent(agentId, caseData, options);
+        } else {
+          response = await this.consultAgent(agentId, caseData, options);
+        }
 
-      responses.set(agentId, response);
-      totalCost += this.estimateCost(response.tokenUsage);
-      
-      if (options.onStreamChunk) {
-        options.onStreamChunk({
-          type: "agent_complete",
+        if (options.onStreamChunk) {
+          options.onStreamChunk({
+            type: "agent_complete",
+            agentId,
+            timestamp: Date.now(),
+          });
+        }
+        return response;
+      })
+    );
+
+    results.forEach((result, index) => {
+      const agentId = agents[index];
+      if (result.status === "fulfilled") {
+        responses.set(agentId, result.value);
+        totalCost += this.estimateCost(result.value.tokenUsage);
+      } else {
+        this.log(`Error consulting ${agentId}: ${result.reason}`);
+        // Add a placeholder response for failed agents
+        responses.set(agentId, {
           agentId,
-          timestamp: Date.now(),
+          response: `ERROR: Specialist unavailable for consultation. Reason: ${result.reason}`,
+          citations: [],
+          confidence: "low",
+          toolsUsed: [],
+          tokenUsage: { input: 0, output: 0 },
+          timestamp: new Date()
         });
       }
     });
-
-    await Promise.all(consultations);
 
     return {
       responses,
@@ -268,20 +289,20 @@ export class TumorBoardOrchestrator {
     const responses = new Map<AgentId, AgentResponse>();
     let totalCost = 0;
 
-    // 1. Scientific Critic (Dr. Tark)
-    // We inject the round 1 opinions into the case context for the critic
-    const criticResponse = await this.consultAgent("scientific-critic", {
+    const contextWithRound1 = {
       ...caseData,
       clinicalQuestion: `${caseData.clinicalQuestion}\n\n## PROPOSED PLANS TO CRITIQUE:\n${this.formatRound1ForPrompt(round1.responses)}`
-    }, options);
+    };
+
+    // Execute critiques in parallel for performance
+    const [criticResponse, stewardshipResponse] = await Promise.all([
+      this.consultAgent("scientific-critic", contextWithRound1, options),
+      this.consultAgent("stewardship", contextWithRound1, options)
+    ]);
+
     responses.set("scientific-critic", criticResponse);
     totalCost += this.estimateCost(criticResponse.tokenUsage);
 
-    // 2. Stewardship (Dr. Samata)
-    const stewardshipResponse = await this.consultAgent("stewardship", {
-      ...caseData,
-      clinicalQuestion: `${caseData.clinicalQuestion}\n\n## PROPOSED PLANS TO REVIEW FOR COST/BURDEN:\n${this.formatRound1ForPrompt(round1.responses)}`
-    }, options);
     responses.set("stewardship", stewardshipResponse);
     totalCost += this.estimateCost(stewardshipResponse.tokenUsage);
 
@@ -295,7 +316,7 @@ export class TumorBoardOrchestrator {
   }
 
   /**
-   * V14: Consult a specialist agent using the Reflective Loop (Draft -> Critique -> Revise)
+   * V14: Consult a specialist agent using the Reflective Loop
    */
   private async consultReflectiveAgent(
     agentId: AgentId,
@@ -312,9 +333,8 @@ export class TumorBoardOrchestrator {
       options,
       draftSystemPrompt
     );
-    this.log(`[Reflective] Draft complete for ${agentId}`);
 
-    // 2. CRITIQUE (by Scientific Critic)
+    // 2. CRITIQUE
     const persona = AGENT_PERSONAS[agentId];
     const critiqueSystemPrompt = getCritiquePrompt(persona.name, persona.specialty);
     
@@ -331,7 +351,6 @@ ${formatCaseContext(caseData)}`;
       critiqueSystemPrompt,
       critiqueContext
     );
-    this.log(`[Reflective] Critique complete for ${agentId}`);
 
     // 3. REVISION
     const revisionSystemPrompt = getRevisionPrompt(agentId)
@@ -343,9 +362,7 @@ ${formatCaseContext(caseData)}`;
       options,
       revisionSystemPrompt
     );
-    this.log(`[Reflective] Revision complete for ${agentId}`);
 
-    // Aggregate tokens
     return {
       ...finalResponse,
       tokenUsage: {
@@ -369,7 +386,6 @@ ${formatCaseContext(caseData)}`;
     const tools = AGENT_TOOLS[agentId];
     const systemPrompt = systemPromptOverride || getAgentSystemPrompt(agentId);
     
-    // Inject clinician preferences context
     const clinicianId = caseData.submittedBy || "default_clinician";
     const preferencesContext = await this.memoryStore.getFormattedPreferencesContext(clinicianId);
 
@@ -377,7 +393,7 @@ ${formatCaseContext(caseData)}`;
 
 ${formatCaseContext(caseData)}
 
-${preferencesContext ? `\\n${preferencesContext}\\n` : ""}
+${preferencesContext ? "\n" + preferencesContext + "\n" : ""}
 ---
 
 Please provide your ${persona.specialty} assessment of this case.
@@ -394,32 +410,28 @@ Structure your response with clear recommendations and citations.`;
       });
     }
 
-    const messages: Anthropic.Messages.MessageParam[] = [
+    const messages: any[] = [
       {
         role: "user",
         content: messageContent,
       },
     ];
 
-    let response = await this.client.messages.create({
+    let response = await this.provider.generate({
       model: this.config.model,
-      max_tokens: this.config.maxTokens,
+      maxTokens: this.config.maxTokens,
       system: systemPrompt,
       tools,
       messages,
+      usePromptCaching: options.usePromptCaching ?? true,
     });
 
-    // Handle tool use
     const allCitations: Citation[] = [];
     const toolsUsed: string[] = [];
     
-    while (response.stop_reason === "tool_use") {
-      const toolUseBlocks = response.content.filter(
-        (block): block is Anthropic.Messages.ToolUseBlock => block.type === "tool_use"
-      );
-
-      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = await Promise.all(
-        toolUseBlocks.map(async (toolUse) => {
+    while (response.stopReason === "tool_use" && response.toolCalls) {
+      const toolResults = await Promise.all(
+        response.toolCalls.map(async (toolUse: any) => {
           this.log(`  Tool call: ${toolUse.name}`);
           toolsUsed.push(toolUse.name);
           
@@ -450,43 +462,33 @@ Structure your response with clear recommendations and citations.`;
         })
       );
 
-      // Continue conversation with tool results
-      messages.push({ role: "assistant", content: response.content });
+      messages.push({ role: "assistant", content: response.content || "Processing tool results..." });
       messages.push({ role: "user", content: toolResults });
 
-      response = await this.client.messages.create({
+      response = await this.provider.generate({
         model: this.config.model,
-        max_tokens: this.config.maxTokens,
+        maxTokens: this.config.maxTokens,
         system: systemPrompt,
         tools,
         messages,
       });
     }
 
-    // Extract text response
-    const textContent = response.content
-      .filter((block): block is Anthropic.Messages.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
-
-    this.log(`  ${persona.name} completed (${response.usage.output_tokens} tokens)`);
+    this.log("  " + persona.name + " completed (" + response.usage.output + " tokens)");
 
     return {
       agentId,
-      response: textContent,
+      response: response.content,
       citations: allCitations,
-      confidence: this.assessConfidence(textContent),
+      confidence: this.assessConfidence(response.content),
       toolsUsed,
-      tokenUsage: {
-        input: response.usage.input_tokens,
-        output: response.usage.output_tokens,
-      },
+      tokenUsage: response.usage,
       timestamp: new Date(),
     };
   }
 
   /**
-   * Round 2: Chain of Debate - Cross-specialty review & Critique Response
+   * Round 2: Chain of Debate
    */
   private async executeRound2(
     caseData: CaseData,
@@ -503,10 +505,7 @@ Structure your response with clear recommendations and citations.`;
   } | null> {
     this.log("=== ROUND 2: CHAIN OF DEBATE & REBUTTAL ===");
     
-    // Identify potential conflicts from Round 1
     const conflicts = this.identifyConflicts(round1.responses);
-    
-    // Also check for Critical Vetoes from Dr. Tark
     const criticResponse = critique.responses.get("scientific-critic");
     const hasCriticObjection = criticResponse?.response.toLowerCase().includes("objection") || 
                                criticResponse?.response.toLowerCase().includes("unsafe");
@@ -516,17 +515,18 @@ Structure your response with clear recommendations and citations.`;
       return null;
     }
 
-    this.log(`Identified ${conflicts.length} areas for debate + Critic Feedback`);
-    
     const startTime = new Date();
     const responses = new Map<AgentId, AgentResponse>();
-    let totalCost = 0;
 
-    // Use Principal Investigator (Dr. Adhyaksha) as Moderator
     const moderatorId: AgentId = "principal-investigator";
     
     const conflictSummary = conflicts
-      .map((c) => `- ${c.topic}: ${Array.from(c.positions.entries()).map(([a, p]) => `${AGENT_PERSONAS[a].name}: ${p}`).join(" vs ")}`)
+      .map((c) => {
+        const agentPositions = Array.from(c.positions.entries())
+          .map(([a, p]) => `${AGENT_PERSONAS[a].name}: ${p}`)
+          .join(" vs ");
+        return `- ${c.topic}: ${agentPositions}`;
+      })
       .join("\n");
 
     const critiqueSummary = `
@@ -543,7 +543,6 @@ ${critique.responses.get("stewardship")?.response || "None"}
     }, options);
 
     responses.set(moderatorId, debateResponse);
-    totalCost = this.estimateCost(debateResponse.tokenUsage);
 
     return {
       activeAgents: [moderatorId],
@@ -551,7 +550,7 @@ ${critique.responses.get("stewardship")?.response || "None"}
       conflicts,
       startTime,
       endTime: new Date(),
-      cost: totalCost,
+      cost: this.estimateCost(debateResponse.tokenUsage),
     };
   }
 
@@ -574,7 +573,6 @@ ${critique.responses.get("stewardship")?.response || "None"}
     this.log("=== ROUND 3: CONSENSUS BUILDING ===");
     const startTime = Date.now();
 
-    // Compile all specialist opinions
     const allOpinions = Array.from(round1.responses.entries())
       .map(([id, r]) => `### ${AGENT_PERSONAS[id].name} (${AGENT_PERSONAS[id].specialty})\n${r.response}`)
       .join("\n\n---\n\n");
@@ -583,9 +581,9 @@ ${critique.responses.get("stewardship")?.response || "None"}
       ? Array.from(round2.responses.values()).map(r => r.response).join("\n\n")
       : "No significant disagreements requiring debate resolution.";
 
-    const response = await this.client.messages.create({
+    const response = await this.provider.generate({
       model: this.config.model,
-      max_tokens: this.config.maxTokens,
+      maxTokens: this.config.maxTokens,
       system: `You are the Tumor Board Conductor synthesizing the final consensus recommendation.
 Your output must be actionable, evidence-based, and clearly documented.`,
       messages: [
@@ -606,47 +604,20 @@ ${debateSummary}
 
 ## GENERATE FINAL CONSENSUS
 
-Please provide the final tumor board recommendation in the following format:
-
-1. **TREATMENT INTENT**: Curative or Palliative
-2. **PRIMARY RECOMMENDATION**: The main treatment approach
-3. **TREATMENT SEQUENCE**: Step-by-step plan
-4. **KEY COMPONENTS**:
-   - Surgery: [if applicable]
-   - Systemic therapy: [if applicable]  
-   - Radiation: [if applicable]
-   - Supportive care: [if applicable]
-5. **ALTERNATIVE OPTIONS**: If primary not feasible
-6. **CLINICAL TRIAL ELIGIBILITY**: Any relevant trials
-7. **FOLLOW-UP & SURVIVORSHIP PLAN**: Monitoring, QoL support, and toxicity management
-8. **PATIENT-FACING SUMMARY**: A 3-4 sentence empathetic, jargon-free explanation for the patient
-9. **DISSENTING OPINIONS**: Any unresolved disagreements
-10. **CONFIDENCE LEVEL**: High/Moderate/Low with rationale
-11. **KEY CITATIONS**: Guideline references supporting this recommendation`,
+Please provide the final tumor board recommendation. Your response should be structured to be easily parsed.`,
         },
       ],
     });
 
-    const consensusText = response.content
-      .filter((block): block is Anthropic.Messages.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
-
-    // Parse the consensus into structured format
-    const recommendation = this.parseRecommendation(consensusText, round1.responses);
+    const recommendation = this.parseRecommendation(response.content, round1.responses);
     const allCitations = this.collectCitations(round1.responses);
-
-    const cost = this.estimateCost({
-      input: response.usage.input_tokens,
-      output: response.usage.output_tokens,
-    });
 
     return {
       recommendation,
       confidence: this.assessOverallConfidence(round1.responses),
-      rationale: consensusText,
+      rationale: response.content,
       citations: allCitations,
-      cost,
+      cost: this.estimateCost(response.usage),
       timing: Date.now() - startTime,
     };
   }
@@ -659,12 +630,10 @@ Please provide the final tumor board recommendation in the following format:
   ): { id: string; topic: string; agents: AgentId[]; positions: Map<AgentId, string> }[] {
     const conflicts: { id: string; topic: string; agents: AgentId[]; positions: Map<AgentId, string> }[] = [];
     
-    // Simple heuristic: look for treatment modality disagreements
     const surgicalResponse = responses.get("surgical-oncologist")?.response.toLowerCase() || "";
     const medicalResponse = responses.get("medical-oncologist")?.response.toLowerCase() || "";
     const radiationResponse = responses.get("radiation-oncologist")?.response.toLowerCase() || "";
 
-    // Check for surgery vs. non-surgery conflict
     if (
       (surgicalResponse.includes("recommend surgery") || surgicalResponse.includes("surgical candidate")) &&
       (medicalResponse.includes("not a surgical candidate") || radiationResponse.includes("definitive chemoradiation"))
@@ -691,7 +660,6 @@ Please provide the final tumor board recommendation in the following format:
     consensusText: string,
     responses: Map<AgentId, AgentResponse>
   ): TreatmentRecommendation {
-    // Simple parsing - in production, use structured output
     const isCurative = consensusText.toLowerCase().includes("curative");
     
     let primaryModality: TreatmentRecommendation["primaryModality"] = "multimodal";
@@ -700,7 +668,6 @@ Please provide the final tumor board recommendation in the following format:
     else if (consensusText.toLowerCase().includes("immunotherapy")) primaryModality = "immunotherapy";
     else if (consensusText.toLowerCase().includes("targeted")) primaryModality = "targeted";
 
-    // Attempt to extract Patient Facing Summary
     const patientSummaryMatch = consensusText.match(/8\\.\\s*\\*\\*PATIENT-FACING SUMMARY\\*\\*:\\s*([\\s\\S]*?)(?:9\\.\\s*\\*\\*DISSENTING OPINIONS\\*\\*|$)/i) || 
                                 consensusText.match(/PATIENT-FACING SUMMARY\\*\\*?\\s*([\\s\\S]*?)(?:\\n\\d\\.|DISSENTING|$)/i);
     const patientFacingSummary = patientSummaryMatch ? patientSummaryMatch[1].trim() : undefined;
@@ -708,7 +675,7 @@ Please provide the final tumor board recommendation in the following format:
     return {
       intent: isCurative ? "curative" : "palliative",
       primaryModality,
-      summary: consensusText.slice(0, 500),
+      summary: consensusText.slice(0, 1000), // Increased slice for more context
       components: [
         {
           modality: primaryModality,
@@ -721,7 +688,7 @@ Please provide the final tumor board recommendation in the following format:
   }
 
   /**
-   * Collect all citations from agent responses
+   * Collect all citations
    */
   private collectCitations(responses: Map<AgentId, AgentResponse>): Citation[] {
     const citations: Citation[] = [];
@@ -732,7 +699,7 @@ Please provide the final tumor board recommendation in the following format:
   }
 
   /**
-   * Assess confidence from response text
+   * Assess confidence
    */
   private assessConfidence(text: string): "high" | "moderate" | "low" {
     const lowConfidenceIndicators = ["uncertain", "unclear", "limited evidence", "consider"];
@@ -748,7 +715,7 @@ Please provide the final tumor board recommendation in the following format:
   }
 
   /**
-   * Assess overall confidence from all responses
+   * Assess overall confidence
    */
   private assessOverallConfidence(responses: Map<AgentId, AgentResponse>): "high" | "moderate" | "low" {
     const confidences = Array.from(responses.values()).map(r => r.confidence);
@@ -764,29 +731,28 @@ Please provide the final tumor board recommendation in the following format:
    * Estimate cost in USD
    */
   private estimateCost(usage: { input: number; output: number }): number {
-    // Claude Sonnet pricing (approximate)
     const inputCostPer1k = 0.003;
     const outputCostPer1k = 0.015;
     return (usage.input / 1000) * inputCostPer1k + (usage.output / 1000) * outputCostPer1k;
   }
 
   /**
-   * Set current phase and notify
+   * Set current phase
    */
   private setPhase(phase: DeliberationPhase, onPhaseChange?: (phase: DeliberationPhase) => void): void {
     this.currentPhase = phase;
-    this.log(`Phase: ${phase}`);
+    this.log("Phase: " + phase);
     if (onPhaseChange) {
       onPhaseChange(phase);
     }
   }
 
   /**
-   * Log message if verbose
+   * Log message
    */
   private log(message: string): void {
     if (this.config.verbose) {
-      console.log(`[VTB] ${message}`);
+      console.log("[VTB] " + message);
     }
   }
 }

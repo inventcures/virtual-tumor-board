@@ -17,6 +17,7 @@
     "@react-email/render": "^1.0.1",
     "@types/ua-parser-js": "^0.7.39",
     "@vtb/agents": "workspace:*",
+    "@vtb/shared": "workspace:*",
     "dicom-parser": "^1.8.21",
     "jspdf": "^4.0.0",
     "lucide-react": "^0.513.0",

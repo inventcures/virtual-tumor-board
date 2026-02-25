@@ -5,3 +5,4 @@ export * from "./types/agents";
 export * from "./types/case";
 export * from "./types/deliberation";
 export * from "./types/citations";
+export * from "./types/outcomes";
