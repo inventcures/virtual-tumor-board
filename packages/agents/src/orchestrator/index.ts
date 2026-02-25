@@ -28,6 +28,8 @@ import {
 import { formatCaseContext } from "./case-formatter";
 import { evaluateSocraticHypothesis, type DeltaReport } from "./socratic-evaluator";
 
+import { PreferenceMemoryStore } from "../memory/preference-store";
+
 export interface OrchestratorConfig {
   /** Anthropic API key */
   apiKey?: string;
@@ -55,12 +57,14 @@ export class TumorBoardOrchestrator {
   private client: Anthropic;
   private config: Required<OrchestratorConfig>;
   private currentPhase: DeliberationPhase = "initializing";
+  private memoryStore: PreferenceMemoryStore;
 
   constructor(config: OrchestratorConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.client = new Anthropic({
       apiKey: this.config.apiKey,
     });
+    this.memoryStore = new PreferenceMemoryStore();
   }
 
   /**
@@ -365,10 +369,15 @@ ${formatCaseContext(caseData)}`;
     const tools = AGENT_TOOLS[agentId];
     const systemPrompt = systemPromptOverride || getAgentSystemPrompt(agentId);
     
+    // Inject clinician preferences context
+    const clinicianId = caseData.submittedBy || "default_clinician";
+    const preferencesContext = await this.memoryStore.getFormattedPreferencesContext(clinicianId);
+
     const messageContent = userMessageOverride || `## CASE FOR TUMOR BOARD REVIEW
 
 ${formatCaseContext(caseData)}
 
+${preferencesContext ? `\\n${preferencesContext}\\n` : ""}
 ---
 
 Please provide your ${persona.specialty} assessment of this case.
