@@ -200,11 +200,25 @@ program
           console.log(chalk.gray("The VTB has completed its deliberation."));
           
           const inquirer = await import("inquirer");
+          const { wantsSocratic } = await inquirer.default.prompt([
+            {
+              type: "confirm",
+              name: "wantsSocratic",
+              message: "Before seeing the final consensus, would you like to provide your initial clinical hypothesis? (This triggers Socratic Evaluation)",
+              default: false,
+            },
+          ]);
+          
+          if (!wantsSocratic) {
+             phaseSpinner.start("Building consensus recommendation...");
+             return "";
+          }
+
           const { userHypothesis } = await inquirer.default.prompt([
             {
               type: "editor",
               name: "userHypothesis",
-              message: "Before seeing the final consensus, what is your initial clinical hypothesis for this case? (Optional, save empty to skip)",
+              message: "What is your initial clinical hypothesis for this case?",
             },
           ]);
           
