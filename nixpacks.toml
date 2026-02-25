@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "pnpm"]
+nixPkgs = ["nodejs_20", "pnpm", "python3", "python311Packages.pillow", "python311Packages.numpy", "python311Packages.requests"]
 
 [phases.install]
 cmds = ["pnpm install"]
 
 [phases.build]
-cmds = ["cd apps/web && pnpm build"]
+cmds = ["pnpm -r build"]
 
 [start]
 cmd = "cd apps/web && pnpm start"

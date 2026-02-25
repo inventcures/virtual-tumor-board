@@ -618,10 +618,11 @@ Please provide the final tumor board recommendation in the following format:
    - Supportive care: [if applicable]
 5. **ALTERNATIVE OPTIONS**: If primary not feasible
 6. **CLINICAL TRIAL ELIGIBILITY**: Any relevant trials
-7. **FOLLOW-UP PLAN**: Monitoring and reassessment
-8. **DISSENTING OPINIONS**: Any unresolved disagreements
-9. **CONFIDENCE LEVEL**: High/Moderate/Low with rationale
-10. **KEY CITATIONS**: Guideline references supporting this recommendation`,
+7. **FOLLOW-UP & SURVIVORSHIP PLAN**: Monitoring, QoL support, and toxicity management
+8. **PATIENT-FACING SUMMARY**: A 3-4 sentence empathetic, jargon-free explanation for the patient
+9. **DISSENTING OPINIONS**: Any unresolved disagreements
+10. **CONFIDENCE LEVEL**: High/Moderate/Low with rationale
+11. **KEY CITATIONS**: Guideline references supporting this recommendation`,
         },
       ],
     });
@@ -699,6 +700,11 @@ Please provide the final tumor board recommendation in the following format:
     else if (consensusText.toLowerCase().includes("immunotherapy")) primaryModality = "immunotherapy";
     else if (consensusText.toLowerCase().includes("targeted")) primaryModality = "targeted";
 
+    // Attempt to extract Patient Facing Summary
+    const patientSummaryMatch = consensusText.match(/8\\.\\s*\\*\\*PATIENT-FACING SUMMARY\\*\\*:\\s*([\\s\\S]*?)(?:9\\.\\s*\\*\\*DISSENTING OPINIONS\\*\\*|$)/i) || 
+                                consensusText.match(/PATIENT-FACING SUMMARY\\*\\*?\\s*([\\s\\S]*?)(?:\\n\\d\\.|DISSENTING|$)/i);
+    const patientFacingSummary = patientSummaryMatch ? patientSummaryMatch[1].trim() : undefined;
+
     return {
       intent: isCurative ? "curative" : "palliative",
       primaryModality,
@@ -710,6 +716,7 @@ Please provide the final tumor board recommendation in the following format:
           agentSource: "medical-oncologist",
         },
       ],
+      patientFacingSummary,
     };
   }
 

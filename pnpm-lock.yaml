@@ -41,10 +41,10 @@ importers:
         version: 0.32.1
       '@cornerstonejs/core':
         specifier: ^4.15.19
-        version: 4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0)
+        version: 4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0)
       '@cornerstonejs/tools':
         specifier: ^4.15.19
-        version: 4.15.19(@cornerstonejs/core@4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0))(@kitware/vtk.js@34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+        version: 4.15.19(@cornerstonejs/core@4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0))(@kitware/vtk.js@34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@google/generative-ai':
         specifier: ^0.21.0
         version: 0.21.0
@@ -54,6 +54,9 @@ importers:
       '@types/ua-parser-js':
         specifier: ^0.7.39
         version: 0.7.39
+      '@vtb/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       dicom-parser:
         specifier: ^1.8.21
         version: 1.8.21
@@ -4236,9 +4239,9 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@cornerstonejs/core@4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0)':
+  '@cornerstonejs/core@4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0)':
     dependencies:
-      '@kitware/vtk.js': 34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0)
+      '@kitware/vtk.js': 34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0)
       comlink: 4.4.2
       gl-matrix: 3.4.3
       loglevel: 1.9.2
@@ -4248,10 +4251,10 @@ snapshots:
       - webpack
       - wslink
 
-  '@cornerstonejs/tools@4.15.19(@cornerstonejs/core@4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0))(@kitware/vtk.js@34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)':
+  '@cornerstonejs/tools@4.15.19(@cornerstonejs/core@4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0))(@kitware/vtk.js@34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)':
     dependencies:
-      '@cornerstonejs/core': 4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0)
-      '@kitware/vtk.js': 34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0)
+      '@cornerstonejs/core': 4.15.19(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0)
+      '@kitware/vtk.js': 34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0)
       '@types/d3-array': 3.2.1
       '@types/d3-interpolate': 3.0.4
       '@types/offscreencanvas': 2019.7.3
@@ -4654,7 +4657,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@kitware/vtk.js@34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1)(wslink@2.5.0)':
+  '@kitware/vtk.js@34.15.1(@babel/preset-env@7.28.6(@babel/core@7.28.6))(autoprefixer@10.4.23(postcss@8.5.6))(webpack@5.104.1(esbuild@0.27.2))(wslink@2.5.0)':
     dependencies:
       '@babel/preset-env': 7.28.6(@babel/core@7.28.6)
       '@babel/runtime': 7.28.6
@@ -4673,7 +4676,7 @@ snapshots:
       stream-browserify: 3.0.0
       utif: 3.1.0
       webworker-promise: 0.5.0
-      worker-loader: 3.0.8(webpack@5.104.1)
+      worker-loader: 3.0.8(webpack@5.104.1(esbuild@0.27.2))
       wslink: 2.5.0
       xmlbuilder2: 3.0.2
     transitivePeerDependencies:
@@ -6806,14 +6809,16 @@ snapshots:
 
   tapable@2.3.0: {}
 
-  terser-webpack-plugin@5.3.16(webpack@5.104.1):
+  terser-webpack-plugin@5.3.16(esbuild@0.27.2)(webpack@5.104.1(esbuild@0.27.2)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       serialize-javascript: 6.0.2
       terser: 5.46.0
-      webpack: 5.104.1
+      webpack: 5.104.1(esbuild@0.27.2)
+    optionalDependencies:
+      esbuild: 0.27.2
 
   terser@5.46.0:
     dependencies:
@@ -7068,7 +7073,7 @@ snapshots:
 
   webpack-sources@3.3.3: {}
 
-  webpack@5.104.1:
+  webpack@5.104.1(esbuild@0.27.2):
     dependencies:
       '@types/eslint-scope': 3.7.7
       '@types/estree': 1.0.8
@@ -7092,7 +7097,7 @@ snapshots:
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.0
-      terser-webpack-plugin: 5.3.16(webpack@5.104.1)
+      terser-webpack-plugin: 5.3.16(esbuild@0.27.2)(webpack@5.104.1(esbuild@0.27.2))
       watchpack: 2.5.1
       webpack-sources: 3.3.3
     transitivePeerDependencies:
@@ -7112,11 +7117,11 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  worker-loader@3.0.8(webpack@5.104.1):
+  worker-loader@3.0.8(webpack@5.104.1(esbuild@0.27.2)):
     dependencies:
       loader-utils: 2.0.4
       schema-utils: 3.3.0
-      webpack: 5.104.1
+      webpack: 5.104.1(esbuild@0.27.2)
 
   wrappy@1.0.2: {}
 

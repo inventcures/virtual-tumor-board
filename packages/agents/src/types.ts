@@ -15,7 +15,9 @@ export type AgentId =
   // V7 New Roles
   | "principal-investigator"
   | "scientific-critic"
-  | "stewardship";
+  | "stewardship"
+  // V19 New Role
+  | "patient-advocate";
 
 export type AuthorityDomain =
   | "systemic_therapy"
@@ -247,6 +249,7 @@ export interface TreatmentRecommendation {
   sequence?: string;
   alternativeOptions?: string[];
   clinicalTrialEligibility?: string;
+  patientFacingSummary?: string;
 }
 
 export interface TreatmentComponent {

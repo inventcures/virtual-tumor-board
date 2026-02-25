@@ -23,6 +23,7 @@ export * from "./geneticist";
 export * from "./scientific-critic";
 export * from "./stewardship";
 export * from "./principal-investigator";
+export * from "./patient-advocate";
 
 import { SURGICAL_ONCOLOGIST } from "./surgical-oncologist";
 import { MEDICAL_ONCOLOGIST } from "./medical-oncologist";
@@ -34,6 +35,7 @@ import { GENETICIST } from "./geneticist";
 import { SCIENTIFIC_CRITIC } from "./scientific-critic";
 import { STEWARDSHIP } from "./stewardship";
 import { PRINCIPAL_INVESTIGATOR } from "./principal-investigator";
+import { PATIENT_ADVOCATE } from "./patient-advocate";
 
 /**
  * All agent personas indexed by ID
@@ -49,6 +51,7 @@ export const AGENT_PERSONAS: Record<AgentId, AgentPersona> = {
   "scientific-critic": SCIENTIFIC_CRITIC,
   "stewardship": STEWARDSHIP,
   "principal-investigator": PRINCIPAL_INVESTIGATOR,
+  "patient-advocate": PATIENT_ADVOCATE,
 };
 
 /**

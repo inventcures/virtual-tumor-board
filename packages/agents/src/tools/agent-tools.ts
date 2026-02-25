@@ -75,6 +75,12 @@ export const AGENT_TOOLS: Record<AgentId, Anthropic.Messages.Tool[]> = {
     ragRetrieveTool,
     literatureSearchTool,
   ],
+  
+  "patient-advocate": [
+    ragRetrieveTool,
+    drugLookupTool,
+    literatureSearchTool,
+  ],
 };
 
 /**

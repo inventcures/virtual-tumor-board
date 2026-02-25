@@ -276,8 +276,15 @@ program
       if (result.recommendation) {
         console.log(chalk.bold("Treatment Intent:"), chalk.cyan(result.recommendation.intent.toUpperCase()));
         console.log(chalk.bold("Primary Modality:"), chalk.cyan(result.recommendation.primaryModality));
-        console.log(chalk.bold("\nRecommendation Summary:"));
+        console.log(chalk.bold("\\nRecommendation Summary:"));
         console.log(chalk.white(result.recommendation.summary));
+
+        if (result.recommendation.patientFacingSummary) {
+          console.log(chalk.bold.blue("\\n\\n🤝 PATIENT-FACING SUMMARY:"));
+          console.log(chalk.gray("─".repeat(60)));
+          console.log(chalk.cyan(result.recommendation.patientFacingSummary));
+          console.log(chalk.gray("─".repeat(60)));
+        }
       }
 
       if (result.rounds.consensus) {
