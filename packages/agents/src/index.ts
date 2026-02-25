@@ -20,6 +20,9 @@ export * from "./tools";
 // RAG connector (interface for Gemini File Search)
 export * from "./rag";
 
+// Memory Store (V19 Adaptive Learning)
+export * from "./memory/preference-store";
+
 // MARC-v1 Extraction (Evaluator-Optimizer Reliability Loops)
 export * from "./extraction";
 export { ExtractionEvaluator } from "./extraction/evaluator";
