@@ -186,25 +186,46 @@ program
     const agentStatus = new Map<AgentId, "pending" | "active" | "complete">();
 
     // Run deliberation
-    console.log(chalk.bold("\n\nSTARTING DELIBERATION\n"));
+    console.log(chalk.bold("\\n\\nSTARTING DELIBERATION\\n"));
     const startTime = Date.now();
 
     try {
       const result = await orchestrator.deliberate(caseData, {
         includeAgents: selectedAgents,
         reflectiveConfig: options.reflective ? { enableSelfCritique: true, searchEnabled: true } : undefined,
+        socraticMode: true,
+        onSocraticPrompt: async () => {
+          phaseSpinner.stop();
+          console.log(chalk.blue("\\n--- Socratic Evaluation Phase ---"));
+          console.log(chalk.gray("The VTB has completed its deliberation."));
+          
+          const inquirer = await import("inquirer");
+          const { userHypothesis } = await inquirer.default.prompt([
+            {
+              type: "editor",
+              name: "userHypothesis",
+              message: "Before seeing the final consensus, what is your initial clinical hypothesis for this case? (Optional, save empty to skip)",
+            },
+          ]);
+          
+          phaseSpinner.start("Evaluating your hypothesis against the VTB consensus...");
+          return userHypothesis;
+        },
         onPhaseChange: (phase: DeliberationPhase) => {
           phaseSpinner.stop();
           switch (phase) {
             case "round1_opinions":
-              console.log(chalk.bold.yellow("\n═══ ROUND 1: SPECIALIST CONSULTATIONS ═══\n"));
+              console.log(chalk.bold.yellow("\\n═══ ROUND 1: SPECIALIST CONSULTATIONS ═══\\n"));
               break;
             case "round2_debate":
-              console.log(chalk.bold.yellow("\n═══ ROUND 2: CHAIN OF DEBATE ═══\n"));
+              console.log(chalk.bold.yellow("\\n═══ ROUND 2: CHAIN OF DEBATE ═══\\n"));
               break;
             case "round3_consensus":
-              console.log(chalk.bold.yellow("\n═══ ROUND 3: CONSENSUS BUILDING ═══\n"));
+              console.log(chalk.bold.yellow("\\n═══ ROUND 3: CONSENSUS BUILDING ═══\\n"));
               phaseSpinner.start("Building consensus recommendation...");
+              break;
+            case "socratic_evaluation":
+              // Handled by onSocraticPrompt
               break;
             case "completed":
               phaseSpinner.succeed("Deliberation complete!");
@@ -246,16 +267,42 @@ program
       }
 
       if (result.rounds.consensus) {
-        console.log(chalk.bold("\n\nFULL CONSENSUS RATIONALE:"));
+        console.log(chalk.bold("\\n\\nFULL CONSENSUS RATIONALE:"));
         console.log(chalk.gray("─".repeat(60)));
         console.log(result.rounds.consensus.rationale);
         console.log(chalk.gray("─".repeat(60)));
         
-        console.log(chalk.bold("\nConfidence Level:"), 
+        console.log(chalk.bold("\\nConfidence Level:"), 
           result.rounds.consensus.confidence === "high" ? chalk.green("HIGH") :
           result.rounds.consensus.confidence === "moderate" ? chalk.yellow("MODERATE") :
           chalk.red("LOW")
         );
+
+        if (result.rounds.consensus.socraticDelta) {
+          const delta = result.rounds.consensus.socraticDelta;
+          console.log(chalk.bold.magenta("\\n\\n🎓 SOCRATIC EDUCATIONAL DELTA REPORT:"));
+          console.log(chalk.gray("═".repeat(60)));
+          console.log(chalk.bold(`Alignment Score:`), delta.alignmentScore >= 80 ? chalk.green(`${delta.alignmentScore}/100`) : chalk.yellow(`${delta.alignmentScore}/100`));
+          
+          if (delta.agreements.length > 0) {
+            console.log(chalk.bold.green("\\nStrong Alignment:"));
+            delta.agreements.forEach((a: string) => console.log(chalk.green(`  ✓ ${a}`)));
+          }
+          
+          if (delta.blindSpots.length > 0) {
+            console.log(chalk.bold.red("\\nClinical Blind Spots:"));
+            delta.blindSpots.forEach((b: string) => console.log(chalk.red(`  ! ${b}`)));
+          }
+
+          if (delta.guidelineDeviations.length > 0) {
+            console.log(chalk.bold.yellow("\\nGuideline Deviations:"));
+            delta.guidelineDeviations.forEach((g: string) => console.log(chalk.yellow(`  ⚠ ${g}`)));
+          }
+
+          console.log(chalk.bold("\\nEducational Feedback:"));
+          console.log(chalk.white(delta.educationalFeedback));
+          console.log(chalk.gray("═".repeat(60)));
+        }
       }
 
       // Display individual agent responses
