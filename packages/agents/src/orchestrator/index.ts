@@ -26,6 +26,7 @@ import {
   getRevisionPrompt 
 } from "./prompts";
 import { formatCaseContext } from "./case-formatter";
+import { evaluateSocraticHypothesis, type DeltaReport } from "./socratic-evaluator";
 
 export interface OrchestratorConfig {
   /** Anthropic API key */
@@ -99,6 +100,32 @@ export class TumorBoardOrchestrator {
       // V7 Phase 4: Consensus Building (PI Led)
       this.setPhase("round3_consensus", options.onPhaseChange);
       const consensus = await this.buildConsensus(caseData, round1Results, round2Results, options);
+
+      // V19 Phase 5: Socratic Evaluation
+      if (options.socraticMode && options.onSocraticPrompt) {
+        this.setPhase("socratic_evaluation", options.onPhaseChange);
+        this.log("=== V19 PHASE 5: SOCRATIC EVALUATION ===");
+        
+        try {
+          const userHypothesis = await options.onSocraticPrompt();
+          if (userHypothesis && userHypothesis.trim() !== "") {
+            const socraticDelta = await evaluateSocraticHypothesis(
+              this.client,
+              this.config.model,
+              caseData,
+              userHypothesis,
+              consensus.rationale,
+              round1Results.responses
+            );
+            (consensus as any).socraticDelta = socraticDelta;
+            this.log("Socratic evaluation completed successfully.");
+          } else {
+            this.log("User hypothesis was empty, skipping Socratic evaluation.");
+          }
+        } catch (error) {
+          this.log(`Socratic evaluation failed or was cancelled: ${error}`);
+        }
+      }
 
       this.setPhase("completed", options.onPhaseChange);
 

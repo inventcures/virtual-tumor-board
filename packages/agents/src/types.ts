@@ -165,6 +165,7 @@ export type DeliberationPhase =
   | "conflict_resolution"
   | "voting"
   | "round3_consensus"
+  | "socratic_evaluation"
   | "completed"
   | "error";
 
@@ -175,6 +176,8 @@ export interface DeliberationOptions {
   usePromptCaching?: boolean;
   useExtendedThinking?: boolean | "auto";
   reflectiveConfig?: ReflectiveAgentConfig;
+  socraticMode?: boolean;
+  onSocraticPrompt?: () => Promise<string>;
   stream?: boolean;
   onStreamChunk?: (chunk: StreamChunk) => void;
   onPhaseChange?: (phase: DeliberationPhase) => void;
@@ -182,7 +185,7 @@ export interface DeliberationOptions {
 }
 
 export interface StreamChunk {
-  type: "text_delta" | "tool_call" | "agent_start" | "agent_complete" | "phase_change";
+  type: "text_delta" | "tool_call" | "agent_start" | "agent_complete" | "phase_change" | "socratic_prompt";
   agentId?: AgentId;
   content?: string;
   toolName?: string;
@@ -233,6 +236,7 @@ export interface ConsensusResult {
   citations: Citation[];
   cost: number;
   timing: number;
+  socraticDelta?: any;
 }
 
 export interface TreatmentRecommendation {

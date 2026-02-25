@@ -60,6 +60,21 @@ export const AGENT_TOOLS: Record<AgentId, Anthropic.Messages.Tool[]> = {
     trialSearchTool,
     literatureSearchTool,
   ],
+  
+  "principal-investigator": [
+    ragRetrieveTool,
+    literatureSearchTool,
+  ],
+  
+  "scientific-critic": [
+    ragRetrieveTool,
+    literatureSearchTool,
+  ],
+  
+  "stewardship": [
+    ragRetrieveTool,
+    literatureSearchTool,
+  ],
 };
 
 /**
