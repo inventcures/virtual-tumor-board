@@ -17,6 +17,12 @@ export interface AIResponse {
   provider: AIProvider;
   model: string;
   tokensUsed?: number;
+  /**
+   * True when the model hit max_tokens and was cut off mid-response.
+   * Callers should treat this as a hard signal that the user-visible output
+   * is incomplete (the silent mid-sentence truncation we hit before).
+   */
+  truncated?: boolean;
 }
 
 export interface AIError {
@@ -84,12 +90,21 @@ async function callClaude(
   }
 
   const data = await response.json();
-  
+
+  const truncated = data.stop_reason === 'max_tokens';
+  if (truncated) {
+    console.warn(
+      `[ai-service] Claude response hit max_tokens cap (max=${maxTokens}). ` +
+      `Output was truncated mid-response.`,
+    );
+  }
+
   return {
     content: data.content[0]?.text || '',
     provider: 'claude',
     model: 'claude-3-5-sonnet-20241022',
     tokensUsed: data.usage?.input_tokens + data.usage?.output_tokens,
+    truncated,
   };
 }
 
@@ -153,11 +168,21 @@ async function callGemini(
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
+  // Gemini reports MAX_TOKENS as the finishReason on the candidate.
+  const truncated = data.candidates?.[0]?.finishReason === 'MAX_TOKENS';
+  if (truncated) {
+    console.warn(
+      `[ai-service] Gemini response hit max_tokens cap (max=${maxTokens}). ` +
+      `Output was truncated mid-response.`,
+    );
+  }
+
   return {
     content: text,
     provider: 'gemini',
     model: 'gemini-2.5-flash',
     tokensUsed: data.usageMetadata?.totalTokenCount,
+    truncated,
   };
 }
 

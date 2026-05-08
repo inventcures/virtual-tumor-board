@@ -386,10 +386,11 @@ export default function Home() {
           <div className={`${showDeliberationCoT ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : ''}`}>
             {/* Main Tumor Board UI */}
             <div className={showDeliberationCoT ? '' : ''}>
-              <TumorBoardUI 
+              <TumorBoardUI
                 key={deliberationKey}
-                caseData={caseData} 
+                caseData={caseData}
                 caseId={currentCase.id}
+                cancerType={currentCase.cancer.type}
                 onRunAnother={handleRunAnother}
               />
             </div>

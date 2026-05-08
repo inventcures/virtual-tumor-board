@@ -9,6 +9,7 @@ import {
   CachedAgentResponse
 } from "@/lib/deliberation-cache";
 import { getCaseById, SampleCase } from "@/lib/sample-cases";
+import { getDemoDissent } from "@/lib/demo-dissent";
 import { callAI, getAvailableProviders } from "@/lib/ai-service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -1100,7 +1101,16 @@ export async function GET(request: NextRequest) {
     // Cache the generated deliberation
     cacheDeliberation(deliberation);
   }
-  
+
+  // Demo cases always surface curated specialist disagreements, whether the
+  // deliberation body came from cache, AI generation, or placeholder.
+  if (!deliberation.dissentingOpinions?.length) {
+    const demoCase = getCaseById(caseId);
+    if (demoCase) {
+      deliberation.dissentingOpinions = getDemoDissent(demoCase.cancer.type);
+    }
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       // Send case info first

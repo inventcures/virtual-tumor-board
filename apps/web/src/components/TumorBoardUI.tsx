@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { AgentCard } from "./AgentCard";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ConsensusPanel } from "./ConsensusPanel";
-import { 
-  Loader2, 
-  CheckCircle2, 
+import { MDTFeed } from "./MDTFeed";
+import type { AgentMDTResponse } from "./AgentMDTPanel";
+import type { DissentEntry } from "./DissentPanel";
+import { getDemoOutput } from "@/lib/demo-citations";
+import {
+  Loader2,
+  CheckCircle2,
   AlertCircle,
   Activity,
-  Zap
+  Zap,
 } from "lucide-react";
 
 import { ROUND1_AGENTS as AGENTS } from "@/lib/agent-config";
@@ -25,14 +28,17 @@ interface AgentResponse {
 interface TumorBoardUIProps {
   caseData: any;
   caseId: string;
+  /** Cancer-type code from sample-cases (LUNG, BREAST, ESOPHAGEAL, ...). Drives demo SOC citations. */
+  cancerType?: string;
   onRunAnother?: () => void;
 }
 
-export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIProps) {
+export function TumorBoardUI({ caseData, caseId, cancerType, onRunAnother }: TumorBoardUIProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({});
   const [agentResponses, setAgentResponses] = useState<Record<string, AgentResponse>>({});
   const [consensus, setConsensus] = useState<string>("");
+  const [dissentingOpinions, setDissentingOpinions] = useState<DissentEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -52,6 +58,38 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
     AGENTS.forEach((a) => (initialStatuses[a.id] = "pending"));
     setAgentStatuses(initialStatuses);
   }, []);
+
+  // Merge live agent responses with curated SOC citations for the demo case.
+  // The SSE stream still provides the markdown body and placeholder string
+  // citations; we attach the rich CuratedCitation[] and a one-line
+  // recommendation chip from the demo fixture when one exists.
+  const enrichedResponses = useMemo<Record<string, AgentMDTResponse>>(() => {
+    const out: Record<string, AgentMDTResponse> = {};
+    for (const agent of AGENTS) {
+      const live = agentResponses[agent.id];
+      const demo = cancerType ? getDemoOutput(cancerType, agent.id) : undefined;
+      if (!live && !demo) continue;
+      out[agent.id] = {
+        response: live?.response ?? "",
+        citations: live?.citations ?? [],
+        toolsUsed: live?.toolsUsed ?? [],
+        curatedCitations: demo?.citations,
+        recommendationHeadline: demo?.recommendationHeadline,
+      };
+    }
+    return out;
+  }, [agentResponses, cancerType]);
+
+  // agentId → topics where that specialist disagreed, for the feed's dissent flags
+  const dissentTopicsByAgent = useMemo<Record<string, string[]>>(() => {
+    const out: Record<string, string[]> = {};
+    for (const entry of dissentingOpinions) {
+      for (const position of entry.positions) {
+        (out[position.agentId] ??= []).push(entry.topic);
+      }
+    }
+    return out;
+  }, [dissentingOpinions]);
 
   // Timer effect
   useEffect(() => {
@@ -84,6 +122,7 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
     setPhase("initializing");
     setElapsedTime(0);
     setConsensus("");
+    setDissentingOpinions([]);
     setError(null);
     setAgentResponses({});
     setIsStreaming(true);
@@ -186,8 +225,18 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
         setConsensus((prev) => prev + data.chunk);
         break;
 
+      case "dissenting_opinions":
+        // Server has parsed the structured DISSENT block from the moderator
+        // and forwarded the array. Empty array = moderator judged no
+        // significant disagreements (also informative — the panel renders
+        // "all specialists aligned").
+        if (Array.isArray(data.disagreements)) {
+          setDissentingOpinions(data.disagreements as DissentEntry[]);
+        }
+        break;
+
       case "debate_update":
-        // Could show a toast or update UI
+        // Reserved for live debate ticker; not currently rendered.
         break;
 
       case "done":
@@ -270,31 +319,23 @@ export function TumorBoardUI({ caseData, caseId, onRunAnother }: TumorBoardUIPro
         </div>
       </div>
 
-      {/* Agent Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {AGENTS.map((agent) => (
-          <div 
-            key={agent.id} 
-            onClick={() => phase === "completed" && scrollToAgent(agent.id)}
-            className={phase === "completed" ? "cursor-pointer" : ""}
-          >
-            <AgentCard
-              agent={agent}
-              status={agentStatuses[agent.id] || "pending"}
-              response={agentResponses[agent.id]}
-              isStreaming={agentStatuses[agent.id] === "streaming"}
-            />
-          </div>
-        ))}
-      </div>
+      {/* MDT Feed — vertical full-width agent panels with sticky jump nav */}
+      <MDTFeed
+        agents={AGENTS}
+        statuses={agentStatuses}
+        responses={enrichedResponses}
+        dissentTopicsByAgent={dissentTopicsByAgent}
+      />
 
       {/* Consensus Panel */}
       {(phase === "consensus" || phase === "completed") && (
-        <ConsensusPanel 
-          consensus={consensus} 
+        <ConsensusPanel
+          consensus={consensus}
           isComplete={phase === "completed"}
           agentResponses={agentResponses}
           onAgentClick={scrollToAgent}
+          cancerType={cancerType}
+          dissentingOpinions={dissentingOpinions}
         />
       )}
 

@@ -2,6 +2,7 @@
 // Stores generated responses and serves them with streaming simulation
 
 import { SampleCase, SAMPLE_CASES } from "./sample-cases";
+import type { DissentEntry } from "@/components/DissentPanel";
 
 export interface CachedAgentResponse {
   agentId: string;
@@ -20,6 +21,8 @@ export interface CachedDeliberation {
   generatedAt: string;
   agents: CachedAgentResponse[];
   consensus: string;
+  /** Structured disagreements forwarded via the dissenting_opinions SSE event. */
+  dissentingOpinions?: DissentEntry[];
 }
 
 // In-memory cache (resets on server restart)
@@ -49,10 +52,10 @@ const CASE_1_CACHE: CachedDeliberation = {
 3. **Patient Fitness**: ECOG 1, age 58 - acceptable surgical candidate if selected
 
 ### Recommendation:
-Given the N2 disease burden, I recommend **definitive concurrent chemoradiotherapy** over upfront surgery. However, if patient strongly prefers surgery:
-- Neoadjuvant chemoimmunotherapy followed by surgery could be considered
-- Would require mediastinal restaging after neoadjuvant therapy
-- Lobectomy with complete mediastinal lymph node dissection
+**I differ from the medical oncology view here.** In this fit 58-year-old (ECOG 1) with a technically resectable RUL primary, I would advocate **trimodality therapy**:
+- Neoadjuvant chemoimmunotherapy (CheckMate 816 approach), then mediastinal restaging
+- If nodal clearance achieved: lobectomy with complete mediastinal lymph node dissection
+- Best local control in selected N2 patients; I acknowledge definitive chemoRT is the guideline-preferred path for multistation N2 and will defer to the board if restaging stays positive
 
 **Indian Context**: Thoracoscopic lobectomy available at major centers (Tata Memorial, AIIMS, Max). Consider patient's travel burden for post-operative follow-up.
 
@@ -410,10 +413,10 @@ Searched ClinicalTrials.gov for "KRAS G12C Stage III NSCLC":
 
 ---
 
-## Consensus Confidence: **HIGH** (7/7 specialists concur)
+## Consensus Confidence: **HIGH** (6/7 concur; 1 dissent recorded)
 
 ### Specialist Sign-off:
-- ✅ Dr. Shalya (Surgical) - Agrees, surgery not first-line
+- ⚠️ Dr. Shalya (Surgical) - **Dissent**: prefers trimodality (neoadjuvant chemo-IO → surgery) in this operable patient; accepts chemoRT as board consensus
 - ✅ Dr. Chikitsa (Medical) - Primary driver of recommendation
 - ✅ Dr. Kirann (Radiation) - RT plan confirmed
 - ✅ Dr. Shanti (Palliative) - Supports curative intent
@@ -538,6 +541,16 @@ export function* streamCachedDeliberation(
     };
   }
 
+  // Must precede the completed phase_change: the client closes the
+  // EventSource as soon as it sees phase "completed".
+  if (deliberation.dissentingOpinions) {
+    yield {
+      type: "dissenting_opinions",
+      data: { disagreements: deliberation.dissentingOpinions },
+      delay: 300,
+    };
+  }
+
   // Completed
   yield { type: "phase_change", data: { phase: "completed" }, delay: 500 };
 }
@@ -656,6 +669,7 @@ export function* streamV18Deliberation(
   };
 
   // Agreement summary
+  const dissentCount = deliberation.dissentingOpinions?.length ?? 0;
   const agreementThought = {
     type: "agent_thought",
     data: {
@@ -664,7 +678,10 @@ export function* streamV18Deliberation(
       agentId: "principal-investigator",
       agentName: "Dr. Adhyaksha",
       specialty: "Moderator",
-      content: "All 7 specialists have reviewed each other's recommendations and reached consensus on the treatment approach.",
+      content:
+        dissentCount > 0
+          ? `Specialists disagreed on ${dissentCount} point${dissentCount === 1 ? "" : "s"} (${deliberation.dissentingOpinions!.map(d => d.topic).join("; ")}). Each was debated and resolved before finalizing the consensus.`
+          : "All 7 specialists have reviewed each other's recommendations and reached consensus on the treatment approach.",
       timestamp: Date.now(),
     },
     delay: 800,
@@ -756,12 +773,40 @@ function extractThoughts(response: string, agentId: string): { text: string; cit
 // Helper: Generate debate points from deliberation
 function generateDebatePoints(deliberation: CachedDeliberation): { from: string; to: string; content: string; agrees: boolean }[] {
   const points: { from: string; to: string; content: string; agrees: boolean }[] = [];
-  
+
+  // Curated dissent drives the debate: opposing positions first, then the
+  // moderator's resolution addressed to the dissenting specialist.
+  if (deliberation.dissentingOpinions?.length) {
+    for (const entry of deliberation.dissentingOpinions) {
+      const [first, second] = entry.positions;
+      if (!first || !second) continue;
+      points.push({
+        from: first.agentId,
+        to: second.agentId,
+        content: first.position,
+        agrees: false,
+      });
+      points.push({
+        from: second.agentId,
+        to: first.agentId,
+        content: second.position,
+        agrees: false,
+      });
+      points.push({
+        from: "principal-investigator",
+        to: first.agentId,
+        content: entry.resolution,
+        agrees: true,
+      });
+    }
+    return points;
+  }
+
   // Find surgical and medical oncologist for classic debate
   const surgical = deliberation.agents.find(a => a.agentId === 'surgical-oncologist');
   const medical = deliberation.agents.find(a => a.agentId === 'medical-oncologist');
   const radiation = deliberation.agents.find(a => a.agentId === 'radiation-oncologist');
-  
+
   if (surgical && medical) {
     points.push({
       from: 'surgical-oncologist',

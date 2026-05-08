@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Brain,
@@ -13,13 +13,34 @@ import {
   ArrowLeft,
   RotateCcw,
   User,
-  Stethoscope
+  Stethoscope,
 } from "lucide-react";
-import { AgentCard } from "@/components/AgentCard";
 import { ConsensusPanel } from "@/components/ConsensusPanel";
+import { MDTFeed } from "@/components/MDTFeed";
+import type { AgentMDTResponse } from "@/components/AgentMDTPanel";
+import type { DissentEntry } from "@/components/DissentPanel";
+import { getDemoOutput, DEMO_CITATIONS } from "@/lib/demo-citations";
 import type { UploadSession } from "@/types/user-upload";
 import { getCancerSiteById, DOCUMENT_TYPE_LABELS } from "@/lib/upload/constants";
 import { ALL_DELIBERATION_AGENTS as AGENTS } from "@/lib/agent-config";
+
+/**
+ * Normalize a free-text cancer-site label (e.g. "lung", "head-neck",
+ * "Esophageal Cancer") to one of the canonical keys used by the demo
+ * citation fixture (LUNG, BREAST, COLORECTAL, HEAD_NECK, CERVIX,
+ * PROSTATE, GASTRIC, OVARIAN, ESOPHAGEAL, BRAIN). Returns undefined when
+ * no match — in which case the MDT feed renders without curated citations.
+ */
+function normalizeCancerType(site: string | undefined): string | undefined {
+  if (!site) return undefined;
+  const upper = site.toUpperCase().replace(/[-\s]+/g, "_");
+  if (upper in DEMO_CITATIONS) return upper;
+  // Forgive common variants.
+  for (const key of Object.keys(DEMO_CITATIONS)) {
+    if (upper.includes(key)) return key;
+  }
+  return undefined;
+}
 
 type Phase = 
   | "idle" 
@@ -47,12 +68,41 @@ export default function DeliberatePage() {
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({});
   const [agentResponses, setAgentResponses] = useState<Record<string, AgentResponse>>({});
   const [consensus, setConsensus] = useState<string>("");
+  const [dissentingOpinions, setDissentingOpinions] = useState<DissentEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isStreaming, setIsStreaming] = useState(false);
   
   const streamingResponsesRef = useRef<Record<string, string>>({});
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Normalize the uploaded session's cancer site to a fixture key
+  // (e.g. "lung" → "LUNG"). When matched, curated SOC citations are
+  // attached to each agent panel; when unmatched, the MDT feed renders
+  // the SSE-stream's plain string citations as a fallback.
+  const cancerType = useMemo(
+    () => normalizeCancerType(session?.cancerSite),
+    [session?.cancerSite],
+  );
+
+  // Merge the live SSE responses with curated demo citations + headline.
+  // Falls through cleanly when no curated entry exists for this cancer.
+  const enrichedResponses = useMemo<Record<string, AgentMDTResponse>>(() => {
+    const out: Record<string, AgentMDTResponse> = {};
+    for (const agent of AGENTS) {
+      const live = agentResponses[agent.id];
+      const demo = cancerType ? getDemoOutput(cancerType, agent.id) : undefined;
+      if (!live && !demo) continue;
+      out[agent.id] = {
+        response: live?.response ?? "",
+        citations: live?.citations ?? [],
+        toolsUsed: live?.toolsUsed ?? [],
+        curatedCitations: demo?.citations,
+        recommendationHeadline: demo?.recommendationHeadline,
+      };
+    }
+    return out;
+  }, [agentResponses, cancerType]);
 
   // Load session from localStorage
   useEffect(() => {
@@ -118,6 +168,7 @@ export default function DeliberatePage() {
     setPhase("initializing");
     setElapsedTime(0);
     setConsensus("");
+    setDissentingOpinions([]);
     setError(null);
     setAgentResponses({});
     setIsStreaming(true);
@@ -224,6 +275,12 @@ export default function DeliberatePage() {
 
       case "consensus_chunk":
         setConsensus((prev) => prev + data.chunk);
+        break;
+
+      case "dissenting_opinions":
+        if (Array.isArray(data.disagreements)) {
+          setDissentingOpinions(data.disagreements as DissentEntry[]);
+        }
         break;
 
       case "done":
@@ -370,31 +427,24 @@ export default function DeliberatePage() {
           </div>
         </div>
 
-        {/* Agent Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {AGENTS.map((agent) => (
-            <div 
-              key={agent.id} 
-              onClick={() => phase === "completed" && scrollToAgent(agent.id)}
-              className={phase === "completed" ? "cursor-pointer" : ""}
-            >
-              <AgentCard
-                agent={agent}
-                status={agentStatuses[agent.id] || "pending"}
-                response={agentResponses[agent.id]}
-                isStreaming={agentStatuses[agent.id] === "streaming"}
-              />
-            </div>
-          ))}
+        {/* MDT Feed — vertical full-width agent panels with sticky jump nav */}
+        <div className="mb-6">
+          <MDTFeed
+            agents={AGENTS}
+            statuses={agentStatuses}
+            responses={enrichedResponses}
+          />
         </div>
 
         {/* Consensus Panel */}
         {(phase === "round3_consensus" || phase === "completed") && (
-          <ConsensusPanel 
-            consensus={consensus} 
+          <ConsensusPanel
+            consensus={consensus}
             isComplete={phase === "completed"}
             agentResponses={agentResponses}
             onAgentClick={scrollToAgent}
+            cancerType={cancerType}
+            dissentingOpinions={dissentingOpinions}
             caseInfo={{
               cancerSite: cancerSite?.label || session.cancerSite,
               stage: session.staging?.stage || session.staging?.tnm,

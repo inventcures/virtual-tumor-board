@@ -52,7 +52,11 @@ const DEFAULT_CONFIG: Required<OrchestratorConfig> = {
   provider: (process.env.VTB_LLM_PROVIDER as LLMProviderType) || "anthropic",
   apiKey: process.env.ANTHROPIC_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
   model: process.env.VTB_LLM_MODEL || "claude-sonnet-4-20250514",
-  maxTokens: 4096,
+  // Headroom default for any path that uses the orchestrator without explicitly
+  // passing maxTokens. The previous 4 096 was hitting cap mid-recommendation
+  // for verbose specialists; per-route paths should still set a tighter cap
+  // when concision instructions are also applied.
+  maxTokens: 8000,
   verbose: false,
 };
 

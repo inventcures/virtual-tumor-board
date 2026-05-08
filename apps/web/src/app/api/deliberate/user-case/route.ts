@@ -27,6 +27,96 @@ import {
 
 export const runtime = "edge";
 
+// ---------------------------------------------------------------------------
+// Structured-dissent parser
+// ---------------------------------------------------------------------------
+
+interface DissentPosition {
+  agentId: string;
+  position: string;
+}
+
+interface DissentEntry {
+  topic: string;
+  significance: "high" | "moderate" | "low";
+  positions: DissentPosition[];
+  resolution: string;
+}
+
+/**
+ * Pull the moderator's fenced `dissent-json` block out of the consensus
+ * markdown. Returns the prose with the block removed (so the user never
+ * sees raw JSON) plus the parsed array. Resilient to: missing block,
+ * malformed JSON, mistyped fence tag, extra prose before/after JSON.
+ *
+ * Empty array means the moderator explicitly judged there were no
+ * meaningful disagreements — that is itself useful clinical information
+ * and the UI should render an "all agreed" empty-state, not silence.
+ */
+function extractDissentBlock(consensus: string): {
+  cleanConsensus: string;
+  dissentingOpinions: DissentEntry[];
+} {
+  // Match a fenced block tagged as dissent-json (most reliable), or fall
+  // back to any fenced JSON that contains a "disagreements" array.
+  const fenceRe =
+    /```(?:dissent-json|json)?\s*\n([\s\S]*?\"disagreements\"[\s\S]*?)```/i;
+  const match = consensus.match(fenceRe);
+  if (!match) {
+    return { cleanConsensus: consensus, dissentingOpinions: [] };
+  }
+
+  const cleanConsensus = consensus.replace(match[0], "").trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1].trim());
+  } catch {
+    console.warn(
+      "[user-case/route] Dissent block found but failed JSON.parse — " +
+      "rendering consensus without disagreements panel.",
+    );
+    return { cleanConsensus, dissentingOpinions: [] };
+  }
+
+  const raw =
+    parsed && typeof parsed === "object" && "disagreements" in parsed
+      ? (parsed as { disagreements: unknown }).disagreements
+      : null;
+  if (!Array.isArray(raw)) {
+    return { cleanConsensus, dissentingOpinions: [] };
+  }
+
+  // Validate each entry; drop ones that don't conform rather than crashing.
+  const valid: DissentEntry[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const topic = typeof e.topic === "string" ? e.topic : null;
+    const resolution =
+      typeof e.resolution === "string" ? e.resolution : "";
+    const significance =
+      e.significance === "high" ||
+      e.significance === "moderate" ||
+      e.significance === "low"
+        ? e.significance
+        : "moderate";
+    const positionsRaw = Array.isArray(e.positions) ? e.positions : [];
+    const positions: DissentPosition[] = [];
+    for (const p of positionsRaw) {
+      if (!p || typeof p !== "object") continue;
+      const pp = p as Record<string, unknown>;
+      if (typeof pp.agentId === "string" && typeof pp.position === "string") {
+        positions.push({ agentId: pp.agentId, position: pp.position });
+      }
+    }
+    if (topic && positions.length >= 1) {
+      valid.push({ topic, significance, positions, resolution });
+    }
+  }
+
+  return { cleanConsensus, dissentingOpinions: valid };
+}
+
 // Agent configurations
 const AGENT_CONFIGS = [
   { 
@@ -297,6 +387,44 @@ ${userType === 'patient' ? `
 End with a simple, jargon-free summary in 3-4 sentences that a patient can understand.
 ` : ''}
 
+### Structured Dissent Block — REQUIRED, machine-parsed
+
+After your prose consensus is complete, append a fenced JSON block (and ONLY one) that
+captures every clinically meaningful disagreement that surfaced across the specialists.
+This block is parsed by the UI to render a dedicated "Disagreements" panel for the
+clinician — it must be valid JSON, terminated by a closing fence on its own line.
+
+The block must use this exact shape:
+
+\`\`\`dissent-json
+{
+  "disagreements": [
+    {
+      "topic": "Short noun-phrase describing the question under dispute (e.g. 'Timing of surgery — upfront vs. after neoadjuvant chemo').",
+      "significance": "high | moderate | low",
+      "positions": [
+        {
+          "agentId": "surgical-oncologist",
+          "position": "1–2 sentences: what THIS agent recommended and the core reason."
+        },
+        {
+          "agentId": "medical-oncologist",
+          "position": "1–2 sentences: what THIS agent recommended and the core reason."
+        }
+      ],
+      "resolution": "1–2 sentences: how YOU (the moderator) reconciled it, or — if unresolved — what additional data is needed to break the tie."
+    }
+  ]
+}
+\`\`\`
+
+Rules for the dissent block:
+- Use the canonical agentId values (surgical-oncologist, medical-oncologist, radiation-oncologist, radiologist, pathologist, geneticist, palliative-care, scientific-critic, stewardship, principal-investigator). Do NOT use display names like "Dr. Shalya".
+- "significance" is your judgement of clinical impact: 'high' = changes the treatment plan; 'moderate' = changes intensity, sequence or surveillance; 'low' = tone or framing only.
+- If two specialists actually agree, do NOT invent a disagreement. Empty array { "disagreements": [] } is a perfectly valid and informative output.
+- Every disagreement should have at least 2 positions. List every dissenting specialist on a given topic.
+- The block must appear ONCE, AFTER the prose consensus, and use the exact \`dissent-json\` fence tag so the parser can find it.
+
 ### Disclaimer
 Include: "This AI-generated opinion is for informational purposes only and does not constitute medical advice. Please discuss these recommendations with your treating oncologist."
 `;
@@ -426,19 +554,25 @@ export async function POST(request: NextRequest) {
             const isDrChitran = agent.id === 'radiologist';
             const hasImagingForChitran = isDrChitran && hasImagingStudies;
             
-            // Build system prompt with user case additions
+            // Build system prompt with user case additions.
+            //
+            // Output discipline: each agent's budget is finite. The earlier
+            // version asked every agent for "500–800 words" of case recap +
+            // findings + assessment + recs + tests + summary, which meant the
+            // *recommendation* — the only thing the clinician really needs —
+            // landed near the end and routinely got truncated mid-sentence.
+            // We now demand recommendation-first, no recap, hard 800-word ceiling.
             let systemPrompt = `You are ${agent.name}, a ${agent.specialty} specialist on a virtual tumor board.
 
-IMPORTANT: Provide a COMPREHENSIVE, DETAILED response (at least 500-800 words). Structure your response with clear sections:
-1. Data Limitations (if any)
-2. Key Clinical Findings from Available Data
-3. Your Specialty-Specific Assessment
-4. Treatment Recommendations
-5. Recommended Additional Tests/Consultations
-6. Summary and Confidence Level
+OUTPUT DISCIPLINE — read carefully:
 
-Be evidence-based and cite NCCN, ESMO, or other relevant guidelines where applicable.
-Consider Indian healthcare context including drug availability and cost.
+1. LEAD with your specialty-specific recommendation. The first heading must be "## Recommendation" containing a 2–4 sentence concrete answer (drug regimen + dose / surgical plan / RT dose & fractionation / IHC + molecular panel to order / etc.). No throat-clearing.
+2. DO NOT recap the patient's demographics, prior treatments, imaging, labs, biomarkers, or staging. The moderator already has them. The clinician reading you already has them. Restating wastes the budget.
+3. Use bullets, not paragraphs. Skip any section that is not material to YOUR decision.
+4. Cite a specific guideline section for every clinical claim, inline, e.g. "(NCCN HCC v3.2025, HEP-3, Cat. 1)" or "(ASTRO Liver SBRT, 2023)" or "(CAP Liver protocol §B.2)". Generic "per NCCN" without a section is not acceptable.
+5. End with "## What I would order next" — 1–4 concrete actions (a specific test, scan, biopsy, drug, dose adjustment, or referral). One bullet each.
+6. Target 250–500 words. HARD CEILING 800 words. If you would otherwise exceed it, drop adjectives and rationale, keep the recommendation and citations.
+7. India-context notes only when they change the recommendation (drug unavailable, prohibitive cost, requires tertiary referral). Skip generic boilerplate.
 ${getUserCaseSystemPromptAddition(uploadedTypes, missingDocs, session.userType)}`;
 
             // V6: Add enhanced imaging prompt for Dr. Chitran when images are available
@@ -466,7 +600,7 @@ Your task: ${agent.prompt}
 
 ${caveat ? 'Note: ' + caveat : ''}
 
-Provide your specialist assessment based on the available data. Structure your response with clear sections.`;
+Begin your response with "## Recommendation" — give the clinician your specialty's specific answer first, then a brief evidence-grounded rationale, then "## What I would order next". Stay under 800 words.`;
 
             let response = "";
             
@@ -474,7 +608,11 @@ Provide your specialist assessment based on the available data. Structure your r
               const aiResponse = await callAI(
                 [{ role: "user", content: userPrompt }],
                 systemPrompt,
-                { maxTokens: 4000 }  // Increased for full detailed responses
+                // 800-word ceiling in the system prompt ≈ ~1 500 tokens.
+                // 8 000 leaves 5× headroom for an unusually verbose response
+                // before the cap kicks in — and prevents the silent mid-sentence
+                // truncation that 4 000 was producing on medical-onc regimens.
+                { maxTokens: 8000 }
               );
               response = aiResponse.content;
             } catch (err) {
@@ -535,7 +673,10 @@ ${getUserCaseConsensusPrompt(uploadedTypes, missingDocs, session.userType)}`;
                 content: `Case Context:\n${caseContext}\n\nSpecialist Opinions:\n${agentSummary}\n\nSynthesize these opinions into a consensus recommendation following the required sections.`
               }],
               consensusSystemPrompt,
-              { maxTokens: 4000 }  // Increased for comprehensive consensus
+              // Consensus aggregates 7+ tightened specialist outputs (~1.5K tokens
+              // each) and must synthesise + flag dissent + render the final plan.
+              // 12 000 is comfortable headroom; previous 4 000 truncated the plan.
+              { maxTokens: 12000 }
             );
             consensus = aiResponse.content;
           } catch (err) {
@@ -550,6 +691,17 @@ Unable to generate consensus at this time. Please review individual specialist o
 
 *[AI Service Error - Please try again]*`;
           }
+
+          // Extract the structured dissent block (if the moderator emitted one),
+          // strip it from the prose so the user doesn't see raw JSON, and forward
+          // the parsed array as a dedicated SSE event the UI can render as a
+          // "Disagreements" card.
+          const { cleanConsensus, dissentingOpinions } = extractDissentBlock(consensus);
+          consensus = cleanConsensus;
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: "dissenting_opinions",
+            disagreements: dissentingOpinions,
+          })}\n\n`));
 
           // Stream consensus
           const chunkSize = 50;
