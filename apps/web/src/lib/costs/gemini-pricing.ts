@@ -21,7 +21,16 @@ export interface GeminiModelPricing {
  * gemini-2.0-flash is the primary model used in MARC-v1
  */
 export const GEMINI_PRICING: Record<string, GeminiModelPricing> = {
-  // Gemini 2.0 Flash - Primary model for MARC-v1
+  // Gemini 3.1 Flash Lite - Primary model for MARC-v1 (successor to retired 2.0 Flash)
+  'gemini-3.1-flash-lite': {
+    model: 'gemini-3.1-flash-lite',
+    inputPricePerMillion: 0.10,
+    outputPricePerMillion: 0.40,
+    contextWindow: 1000000,
+    notes: 'Primary model for extraction, OCR, and evaluation',
+  },
+
+  // Gemini 2.0 Flash - retired by Google (kept for historical cost records)
   'gemini-2.0-flash': {
     model: 'gemini-2.0-flash',
     inputPricePerMillion: 0.10,    // $0.10 per 1M input tokens
@@ -68,7 +77,7 @@ export const GEMINI_PRICING: Record<string, GeminiModelPricing> = {
 };
 
 // Default model used in MARC-v1
-export const DEFAULT_MODEL = 'gemini-2.0-flash';
+export const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
 
 /**
  * Calculate cost for a single API call

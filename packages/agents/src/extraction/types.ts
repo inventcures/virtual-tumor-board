@@ -155,7 +155,7 @@ export interface ReliabilityLoopConfig {
   minImprovement: number;
   /** Timeout in milliseconds (default: 30000) */
   timeoutMs: number;
-  /** Model to use for evaluation (default: "gemini-2.0-flash") */
+  /** Model to use for evaluation (default: "gemini-3.1-flash-lite") */
   model: string;
   /** Enable verbose logging */
   verbose: boolean;
@@ -169,7 +169,7 @@ export const DEFAULT_RELIABILITY_CONFIG: ReliabilityLoopConfig = {
   maxIterations: 3,
   minImprovement: 0.05,
   timeoutMs: 30000,
-  model: "gemini-2.0-flash",
+  model: "gemini-3.1-flash-lite",
   verbose: true,
 };
 

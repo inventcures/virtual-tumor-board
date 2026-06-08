@@ -304,7 +304,7 @@ export async function singlePassExtraction(
   feedback: EvaluationFeedback;
 }> {
   const evaluator = new ExtractionEvaluator({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-flash-lite',
     apiKey: options.apiKey,
     verbose: options.verbose ?? false,
   });

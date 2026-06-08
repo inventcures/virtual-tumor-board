@@ -107,14 +107,14 @@ export class MedGemmaClient {
       console.log('[MedGemma] Attempting Gemini (Final fallback)...');
       const response = await this.callGemini(image, prompt);
       response.modelInfo = {
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-3.1-flash-lite',
         provider: 'Google AI Studio',
-        version: 'Gemini 2.0 Flash (Vision fallback)'
+        version: 'Gemini 3.1 Flash Lite (Vision fallback)'
       };
       
       // Log successful analytics
       analytics.logMedGemmaAnalysis({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-3.1-flash-lite',
         provider: 'Google AI Studio',
         modality: image.metadata.modality,
         bodyPart: image.metadata.bodyPart,
@@ -525,7 +525,7 @@ export class MedGemmaClient {
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {

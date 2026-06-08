@@ -148,7 +148,7 @@ function classifyByPatterns(text: string): { type: DocumentType; confidence: num
 // Extract text from image using Gemini Vision
 async function extractTextFromImage(base64Data: string, mimeType: string): Promise<string> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
     
     const result = await model.generateContent([
       {
@@ -176,7 +176,7 @@ Output ONLY the extracted text, nothing else.`,
 // Classify document using Gemini (for ambiguous cases)
 async function classifyWithGemini(text: string): Promise<{ type: DocumentType; confidence: number }> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
     
     const prompt = `Classify this medical document into ONE of these categories:
 - pathology (biopsy, histopathology, IHC reports)
@@ -219,7 +219,7 @@ async function extractClinicalData(
   docType: DocumentType
 ): Promise<ExtractedClinicalData> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
     
     const extractionPrompts: Record<DocumentType, string> = {
       pathology: `Extract from this PATHOLOGY report:

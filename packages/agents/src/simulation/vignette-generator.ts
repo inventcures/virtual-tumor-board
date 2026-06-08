@@ -28,7 +28,7 @@ export class VignetteGenerator {
       console.warn("VignetteGenerator: No GEMINI_API_KEY provided. Generation will fail.");
     }
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
   }
 
   /**

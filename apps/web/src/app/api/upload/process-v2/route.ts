@@ -147,7 +147,7 @@ function classifyByPatterns(text: string): { type: DocumentType; confidence: num
 }
 
 async function extractTextFromImage(base64Data: string, mimeType: string): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
   const ocrPrompt = "Extract ALL text from this medical document. Include headers, tables, values. Output ONLY the text.";
   const result = await model.generateContent([
     { inlineData: { data: base64Data, mimeType } },
@@ -157,7 +157,7 @@ async function extractTextFromImage(base64Data: string, mimeType: string): Promi
   
   // Log OCR cost (estimate input tokens from base64 size - roughly 0.75 bytes per token for images)
   logAPIUsage({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-flash-lite',
     inputTokens: Math.ceil(base64Data.length * 0.75 / 4) + estimateTokens(ocrPrompt),
     outputText: responseText,
     category: 'marc_extraction',
@@ -217,7 +217,7 @@ async function checkAccuracy(sourceText: string, data: ExtractedClinicalData): P
   if (dataKeys.length === 0) return 0.5;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
     const prompt = `Verify extraction accuracy. Source (first 3000 chars):
 ${sourceText.slice(0, 3000)}
 
@@ -232,7 +232,7 @@ Score accuracy 0-1 where 1=perfect. Respond ONLY with JSON: {"accuracy": 0.85}`;
     
     // Log evaluation cost
     logAPIUsage({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3.1-flash-lite',
       inputText: prompt,
       outputText: responseText,
       category: 'marc_evaluation',
@@ -406,7 +406,7 @@ async function runReliabilityLoop(
   let iteration = 0;
   let stoppedReason = '';
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
   while (true) {
     iteration++;
@@ -422,7 +422,7 @@ async function runReliabilityLoop(
       
       // Log extraction cost
       logAPIUsage({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.1-flash-lite',
         inputText: fullPrompt,
         outputText: responseText,
         category: 'marc_extraction',
@@ -612,7 +612,7 @@ export async function POST(request: NextRequest) {
       log(`Loop complete: score=${(result.finalScore * 100).toFixed(1)}%, iterations=${result.iterations}`);
     } else {
       // Single-pass
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
       const fullPrompt = `${basePrompt}\n\nDocument:\n${redactedText.slice(0, 6000)}\n\nJSON only.`;
       const result = await model.generateContent(fullPrompt);
       const responseText = result.response.text();
@@ -621,7 +621,7 @@ export async function POST(request: NextRequest) {
       
       // Log single-pass extraction cost
       logAPIUsage({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.1-flash-lite',
         inputText: fullPrompt,
         outputText: responseText,
         category: 'marc_extraction',

@@ -48,7 +48,7 @@ export class ExtractionEvaluator {
       "";
     
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = config.model || "gemini-2.0-flash";
+    this.model = config.model || "gemini-3.1-flash-lite";
     this.weights = config.weights || DEFAULT_EVALUATOR_WEIGHTS;
     this.verbose = config.verbose ?? true;
   }

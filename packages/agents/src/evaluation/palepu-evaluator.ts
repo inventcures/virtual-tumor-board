@@ -46,7 +46,7 @@ export class PalepuEvaluator {
       console.warn("PalepuEvaluator: No GEMINI_API_KEY provided. Evaluation will fail.");
     }
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
   }
 
   /**

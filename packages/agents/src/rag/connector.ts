@@ -90,7 +90,7 @@ export class RAGConnector {
     try {
       // Use Gemini with grounding via File Search
       const model = this.genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
+        model: "gemini-3.1-flash-lite",
         tools: [
           {
             // @ts-expect-error - Gemini SDK types may not include fileSearch yet
