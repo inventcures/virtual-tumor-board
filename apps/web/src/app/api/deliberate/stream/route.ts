@@ -9,7 +9,11 @@ import {
   CachedAgentResponse
 } from "@/lib/deliberation-cache";
 import { getCaseById, SampleCase } from "@/lib/sample-cases";
-import { getDemoDissent } from "@/lib/demo-dissent";
+import {
+  getDemoDissent,
+  renderDissentArbitrationMarkdown,
+  DISSENT_ARBITRATION_HEADING,
+} from "@/lib/demo-dissent";
 import { callAI, getAvailableProviders } from "@/lib/ai-service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -1109,6 +1113,16 @@ export async function GET(request: NextRequest) {
     if (demoCase) {
       deliberation.dissentingOpinions = getDemoDissent(demoCase.cancer.type);
     }
+  }
+
+  // The final consensus document records how each disagreement was
+  // arbitrated. Guard against double-append: the cached object is mutated
+  // in place and reused across requests.
+  if (
+    deliberation.dissentingOpinions?.length &&
+    !deliberation.consensus.includes(DISSENT_ARBITRATION_HEADING)
+  ) {
+    deliberation.consensus += `\n\n---\n\n${renderDissentArbitrationMarkdown(deliberation.dissentingOpinions)}`;
   }
 
   const stream = new ReadableStream({

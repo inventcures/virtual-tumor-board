@@ -13,6 +13,7 @@
  */
 
 import type { DissentEntry } from "@/components/DissentPanel";
+import { getAgentMeta } from "./agent-config";
 
 export const DEMO_DISSENT: Record<string, DissentEntry[]> = {
   LUNG: [
@@ -412,4 +413,49 @@ export const DEMO_DISSENT: Record<string, DissentEntry[]> = {
 
 export function getDemoDissent(cancerType: string): DissentEntry[] {
   return DEMO_DISSENT[cancerType] ?? [];
+}
+
+const SIGNIFICANCE_LABEL: Record<DissentEntry["significance"], string> = {
+  high: "High — changed the treatment plan",
+  moderate: "Moderate — changed intensity / sequencing",
+  low: "Low — tone / framing",
+};
+
+export const DISSENT_ARBITRATION_HEADING = "How Disagreements Were Resolved";
+
+/**
+ * Renders the dissent entries as a markdown arbitration log for inclusion
+ * in the final consensus document (on-screen consensus panel and the
+ * downloadable PDF both render the consensus markdown verbatim).
+ */
+export function renderDissentArbitrationMarkdown(
+  entries: DissentEntry[],
+): string {
+  if (entries.length === 0) return "";
+
+  const sections = entries.map((entry, i) => {
+    const positions = entry.positions
+      .map((p) => {
+        const meta = getAgentMeta(p.agentId);
+        return `- **${meta.name}** (${meta.specialty}) argued: ${p.position}`;
+      })
+      .join("\n");
+
+    return [
+      `### Disagreement ${i + 1}: ${entry.topic}`,
+      `**Significance**: ${SIGNIFICANCE_LABEL[entry.significance]}`,
+      "",
+      positions,
+      "",
+      `> ⚖️ **Board arbitration (Dr. Adhyaksha, Chairperson)**: ${entry.resolution}`,
+    ].join("\n");
+  });
+
+  return [
+    `## ⚖️ ${DISSENT_ARBITRATION_HEADING}`,
+    "",
+    `Consensus was not unanimous. ${entries.length} disagreement${entries.length === 1 ? " was" : "s were"} formally debated during Round 2 and arbitrated by the chairperson before the recommendation above was adopted:`,
+    "",
+    sections.join("\n\n"),
+  ].join("\n");
 }
